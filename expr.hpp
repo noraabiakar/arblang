@@ -219,23 +219,23 @@ struct print : visitor {
     print(std::ostream& out, int indent = 0) : indent_(indent), out_(out) {}
 
     virtual void visit(const func_expr& e) override {
-        out_ << "(let_f (" << e.name_ << "(";
+        out_ << "(let_f (" << e.name_ << " (";
 
         auto t = e.type_->is_func();
         for (unsigned i = 0; i < e.args_.size(); ++i) {
-            out_ << "(" << e.args_[i] << ":" << t->args_[i]->id() << ")";
+            out_ << e.args_[i] << ":" << t->args_[i]->id() << " ";
         }
-        out_ << ")\n";
+        out_ << ") ";
         e.body_->accept(*this);
-        out_ << ")\n";
+        out_ << "))";
     }
 
     virtual void visit(const struct_expr& e) override {
-        out_ << "(let_s (" << e.name_ << "(";
+        out_ << "(let_s (" << e.name_ << " (";
 
         auto t = e.type_->is_struct();
         for (unsigned i = 0; i < e.fields_.size(); ++i) {
-            out_ << e.fields_[i] << ":" << t->fields_[i]->id();
+            out_ << e.fields_[i] << ":" << t->fields_[i]->id() << " ";
         }
         out_ << ")))\n";
     }
