@@ -63,7 +63,7 @@ struct func_expr : expression {
     expr body_;
     type type_;
 
-    func_expr(type ret, std::string name, std::vector<pair> args, expr body)
+    func_expr(std::string name, type ret, std::vector<pair> args, expr body)
             : name_(name), body_(body) {
         std::vector <type> types;
         for (auto a: args) {
@@ -194,7 +194,7 @@ struct create_expr : expression {
     expr struct_;
     std::vector <expr> fields_;
 
-    create_expr(expr str, std::vector <expr> fields) : struct_(str), fields_(fields) {}
+    create_expr(expr str, std::vector<expr> fields) : struct_(str), fields_(fields) {}
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -227,7 +227,7 @@ struct print : visitor {
         }
         out_ << ") ";
         e.body_->accept(*this);
-        out_ << "))";
+        out_ << ")))\n";
     }
 
     virtual void visit(const struct_expr& e) override {
