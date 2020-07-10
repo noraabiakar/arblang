@@ -36,10 +36,11 @@ struct struct_type : typeobj {
 };
 
 struct func_type : typeobj {
+    std::string name_;
     std::vector <type> args_;
     type ret_;
 
-    func_type(std::vector <type> args, type ret) : args_(args), ret_(ret) {}
+    func_type(std::string name, std::vector <type> args, type ret) : name_(name), args_(args), ret_(ret) {}
 
     virtual std::string id() const override {
         return "";

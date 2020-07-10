@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -23,24 +24,27 @@ struct div_expr;
 struct access_expr;
 struct create_expr;
 struct apply_expr;
+struct block_expr;
 
 struct visitor {
-    virtual void visit(const func_expr&) = 0;
+    virtual void visit(const func_expr&)   = 0;
     virtual void visit(const struct_expr&) = 0;
-    virtual void visit(const real_expr&) = 0;
-    virtual void visit(const var_expr&) = 0;
-    virtual void visit(const let_expr&) = 0;
-    virtual void visit(const add_expr&) = 0;
-    virtual void visit(const sub_expr&) = 0;
-    virtual void visit(const mul_expr&) = 0;
-    virtual void visit(const div_expr&) = 0;
+    virtual void visit(const real_expr&)   = 0;
+    virtual void visit(const var_expr&)    = 0;
+    virtual void visit(const let_expr&)    = 0;
+    virtual void visit(const add_expr&)    = 0;
+    virtual void visit(const sub_expr&)    = 0;
+    virtual void visit(const mul_expr&)    = 0;
+    virtual void visit(const div_expr&)    = 0;
     virtual void visit(const access_expr&) = 0;
     virtual void visit(const create_expr&) = 0;
-    virtual void visit(const apply_expr&) = 0;
+    virtual void visit(const apply_expr&)  = 0;
+    virtual void visit(const block_expr&)  = 0;
 };
 
 struct expression {
     virtual void accept(visitor&) const {};
+
     virtual func_expr*    is_func()     {return nullptr;}
     virtual struct_expr*  is_struct()   {return nullptr;}
     virtual real_expr*    is_real()     {return nullptr;}
@@ -53,6 +57,7 @@ struct expression {
     virtual access_expr*  is_access()   {return nullptr;}
     virtual create_expr*  is_create()   {return nullptr;}
     virtual apply_expr*   is_apply()    {return nullptr;}
+    virtual block_expr*   is_block()    {return nullptr;}
 };
 
 using expr = std::shared_ptr<expression>;
@@ -70,7 +75,7 @@ struct func_expr : expression {
             args_.push_back(a.name);
             types.push_back(a.t);
         }
-        type_ = std::make_shared<func_type>(std::move(types), ret);
+        type_ = std::make_shared<func_type>(name_, std::move(types), ret);
     }
 
     type signature() {
@@ -212,6 +217,57 @@ struct apply_expr : expression {
     apply_expr* is_apply() override {return this;}
 };
 
+struct block_expr : expression {
+    std::vector<type> scoped_types_ = {std::make_shared<real_type>()};
+    std::vector<expr> statements_;
+
+    block_expr(std::vector <expr> statements) {
+        for (auto& s: statements) {
+            if (!(s->is_func() || s->is_struct())) {
+                throw std::runtime_error("Block expressions can only contain struct or function definitions");
+            }
+            statements_.push_back(s);
+
+            if (auto f = s->is_func()) {
+                auto st_type = f->signature()->is_func();
+                for (auto t: st_type->args_) {
+                    auto it = std::find_if(scoped_types_.begin(), scoped_types_.end(), [&t](type& l){ return l->id() == t->id();});
+                    if (it == scoped_types_.end()) {
+                        throw std::runtime_error(t->id() +" undefined");
+                    }
+                }
+                auto it = std::find_if(scoped_types_.begin(), scoped_types_.end(), [&st_type](type& l){ return l->id() == st_type->ret_->id();});
+                if (it == scoped_types_.end()) {
+                    throw std::runtime_error(st_type->ret_->id() +" undefined");
+                }
+            }
+
+            if (auto f = s->is_struct()) {
+                auto st_type = f->signature()->is_struct();
+                for (auto t: st_type->fields_) {
+                    auto it = std::find_if(scoped_types_.begin(), scoped_types_.end(), [&t](type& l){ return l->id() == t->id();});
+                    if (it == scoped_types_.end()) {
+                        throw std::runtime_error(t->id() +" undefined");
+                    }
+                }
+            }
+
+            auto st_type = s->is_func() ? s->is_func()->signature() : s->is_struct()->signature();
+            auto it = std::find_if(scoped_types_.begin(), scoped_types_.end(), [&st_type](type& t){ return t->id() == st_type->id();});
+
+            if (it != scoped_types_.end()) {
+                throw std::runtime_error("redefinition of " + st_type->id());
+            }
+
+            scoped_types_.push_back(st_type);
+        }
+    }
+
+    virtual void accept(visitor& v) const override { v.visit(*this); };
+
+    block_expr* is_block() override {return this;}
+};
+
 struct print : visitor {
     std::ostream& out_;
     int indent_;
@@ -304,5 +360,10 @@ struct print : visitor {
     virtual void visit(const apply_expr& e) override {
     }
 
+    virtual void visit(const block_expr& e) override {
+        for (auto& s: e.statements_) {
+            s->accept(*this);
+        }
+    }
 };
 

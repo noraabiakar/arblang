@@ -1,7 +1,6 @@
 #include "expr.hpp"
 
-int main() {
-/*{
+void test() {
     auto a = std::make_shared<var_expr>("a");
     auto e = std::make_shared<var_expr>("e");
     auto i = std::make_shared<real_expr>(1);
@@ -16,7 +15,7 @@ int main() {
     auto m0 = std::make_shared<var_expr>("m0");
     auto m1 = std::make_shared<access_expr>(str, "m0");
     auto sub = std::make_shared<sub_expr>(m0, m1);
-    auto fun = std::make_shared<func_expr>(real, "fun", l, sub);
+    auto fun = std::make_shared<func_expr>("fun", real, l, sub);
 
     auto printer = print(std::cout, 2);
 
@@ -37,8 +36,9 @@ int main() {
 
     fun->accept(printer);
     std::cout << std::endl << std::endl;
-}*/
-{
+}
+
+int main() {
     auto printer = print(std::cout, 2);
     auto real = std::make_shared<real_type>();
 
@@ -61,12 +61,9 @@ int main() {
                                                std::vector<pair>{{"p", param->type_}, {"s", state->type_}, {"c", cell->type_}},
                                                std::make_shared<create_expr>(current_contrib, std::vector<expr>{i, g}));
 
-    current_contrib->accept(printer);
-    cell->accept(printer);
-    ion_state->accept(printer);
-    state->accept(printer);
-    param->accept(printer);
-    current->accept(printer);
-}
-return 0; 
+    auto block = std::make_shared<block_expr>(std::vector<expr>{current_contrib, ion_state, cell, state, param, current});
+
+    block->accept(printer);
+
+    return 0;
 }
