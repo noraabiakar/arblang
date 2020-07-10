@@ -51,6 +51,8 @@ struct visitor {
 struct expression {
     virtual void accept(visitor&) const {};
 
+    virtual type signature() const = 0;
+
     virtual func_expr*    is_func()     {return nullptr;}
     virtual struct_expr*  is_struct()   {return nullptr;}
     virtual real_expr*    is_real()     {return nullptr;}
@@ -80,14 +82,22 @@ struct func_expr : expression {
     func_expr(std::string name, type ret, std::vector<pair> args, expr body)
             : name_(name), body_(body) {
         std::vector<type> types;
+
         for (auto a: args) {
+            if (!(a.t->is_struct() || a.t->is_real())) {
+                throw std::runtime_error("functions only accept arguments of real or struct type");
+            }
             args_.push_back(a.name);
             types.push_back(a.t);
+        }
+
+        if (!(ret->is_struct() || ret->is_real())) {
+            throw std::runtime_error("functions can only return real or struct type");
         }
         type_ = std::make_shared<func_type>(name_, std::move(types), ret);
     }
 
-    type signature() {
+    virtual type signature() const override {
         return type_;
     }
 
@@ -106,13 +116,16 @@ struct struct_expr : expression {
     struct_expr(std::string name, std::vector<pair> fields) : name_(name) {
         std::vector<type> types;
         for (auto a: fields) {
+            if (!(a.t->is_struct() || a.t->is_real())) {
+                throw std::runtime_error("struct only accept fields of real or struct type");
+            }
             fields_.push_back(a.name);
             types.push_back(a.t);
         }
         type_ = std::make_shared<struct_type>(name_, std::move(types));
     }
 
-    type signature() {
+    virtual type signature() const override {
         return type_;
     }
 
@@ -129,12 +142,21 @@ struct real_expr : expression {
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
     real_expr* is_real() override {return this;}
+
+    virtual type signature() const override {
+        return std::make_shared<real_type>();
+    }
 };
 
 struct var_expr : expression {
     std::string name_;
+    type type_;
 
-    var_expr(std::string name) : name_(name) {}
+    var_expr(std::string name, type t) : name_(name), type_(t) {}
+
+    virtual type signature() const override {
+        return type_;
+    }
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -148,6 +170,10 @@ struct let_expr : expression {
 
     let_expr(std::string var, expr val, expr scope) : var_(var), val_(val), scope_(scope) {}
 
+    virtual type signature() const override {
+        return std::make_shared<null_type>();
+    }
+
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
     let_expr* is_let() override {return this;}
@@ -157,7 +183,16 @@ struct add_expr : expression {
     expr lhs_;
     expr rhs_;
 
-    add_expr(expr lhs, expr rhs) : lhs_(lhs), rhs_(rhs) {}
+    add_expr(expr lhs, expr rhs) : lhs_(lhs), rhs_(rhs) {
+        if (!(lhs->signature()->is_real()) ||
+            !(rhs->signature()->is_real()) ) {
+            throw std::runtime_error("invalid argument types to add");
+        }
+    }
+
+    virtual type signature() const override {
+        return std::make_shared<real_type>();
+    }
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -168,7 +203,16 @@ struct sub_expr : expression {
     expr lhs_;
     expr rhs_;
 
-    sub_expr(expr lhs, expr rhs) : lhs_(lhs), rhs_(rhs) {}
+    sub_expr(expr lhs, expr rhs) : lhs_(lhs), rhs_(rhs) {
+        if (!(lhs->signature()->is_real()) ||
+            !(rhs->signature()->is_real()) ) {
+            throw std::runtime_error("invalid argument types to sub");
+        }
+    }
+
+    virtual type signature() const override {
+        return std::make_shared<real_type>();
+    }
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -179,7 +223,16 @@ struct mul_expr : expression {
     expr lhs_;
     expr rhs_;
 
-    mul_expr(expr lhs, expr rhs) : lhs_(lhs), rhs_(rhs) {}
+    mul_expr(expr lhs, expr rhs) : lhs_(lhs), rhs_(rhs) {
+        if (!(lhs->signature()->is_real()) ||
+            !(rhs->signature()->is_real()) ) {
+            throw std::runtime_error("invalid argument types to mul");
+        }
+    }
+
+    virtual type signature() const override {
+        return std::make_shared<real_type>();
+    }
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 };
@@ -188,7 +241,16 @@ struct div_expr : expression {
     expr lhs_;
     expr rhs_;
 
-    div_expr(expr lhs, expr rhs) : lhs_(lhs), rhs_(rhs) {}
+    div_expr(expr lhs, expr rhs) : lhs_(lhs), rhs_(rhs) {
+        if (!(lhs->signature()->is_real()) ||
+            !(rhs->signature()->is_real()) ) {
+            throw std::runtime_error("invalid argument types to div");
+        }
+    }
+
+    virtual type signature() const override {
+        return std::make_shared<real_type>();
+    }
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -198,8 +260,27 @@ struct div_expr : expression {
 struct access_expr : expression {
     expr struct_;
     std::string field_;
+    unsigned index_;
 
-    access_expr(expr str, std::string field) : struct_(str), field_(field) {}
+    access_expr(expr str, std::string field) : struct_(str), field_(field) {
+        if (!struct_->is_struct()) {
+            throw std::runtime_error("cannot access field of a non-struct type");
+        }
+
+        auto& flds = struct_->is_struct()->fields_;
+        auto it = std::find_if(flds.begin(), flds.end(), [&](auto& f){return f == field_;});
+
+        if (it == flds.end()) {
+            throw std::runtime_error("field " + field_ + " does not exist in " + struct_->is_struct()->name_);
+        }
+        index_ = it - flds.begin();
+
+    }
+
+    virtual type signature() const override {
+
+        return struct_->is_struct()->signature()->is_struct()->fields_[index_];
+    }
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -210,7 +291,15 @@ struct create_expr : expression {
     expr struct_;
     std::vector<expr> fields_;
 
-    create_expr(expr str, std::vector<expr> fields) : struct_(str), fields_(fields) {}
+    create_expr(expr str, std::vector<expr> fields) : struct_(str), fields_(fields) {
+        if (!struct_->is_struct()) {
+            throw std::runtime_error("cannot create create_expr out of a non-struct type");
+        }
+    }
+
+    virtual type signature() const override {
+        return struct_->is_struct()->signature();
+    }
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -221,7 +310,15 @@ struct apply_expr : expression {
     expr func_;
     std::vector<expr> args_;
 
-    apply_expr(expr func, std::vector<expr> args) : func_(func), args_(args) {}
+    apply_expr(expr func, std::vector<expr> args) : func_(func), args_(args) {
+        if (!func_->is_func()){
+            throw std::runtime_error("cannot apply a non-function type");
+        }
+    }
+
+    virtual type signature() const override {
+        return func_->is_func()->signature()->is_func()->ret_;
+    }
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -274,12 +371,19 @@ struct block_expr : expression {
         }
     }
 
+    virtual type signature() const override {
+        return std::make_shared<null_type>();
+    }
+
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
     block_expr* is_block() override {return this;}
 };
 
 struct halt_expr : expression {
+    virtual type signature() const override {
+        return std::make_shared<null_type>();
+    }
     virtual void accept(visitor& v) const override { v.visit(*this); };
 };
 
@@ -298,6 +402,10 @@ struct nested_expr: expression {
         }
 
         statement_ = b->statements_.front();
+    }
+
+    virtual type signature() const override {
+        return std::make_shared<null_type>();
     }
 
     virtual void accept(visitor& v) const override { v.visit(*this); };

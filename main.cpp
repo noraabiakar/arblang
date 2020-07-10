@@ -1,6 +1,6 @@
 #include "expr.hpp"
 
-void test() {
+/*void test() {
     auto a = std::make_shared<var_expr>("a");
     auto e = std::make_shared<var_expr>("e");
     auto i = std::make_shared<real_expr>(1);
@@ -36,7 +36,7 @@ void test() {
 
     fun->accept(printer);
     std::cout << std::endl << std::endl;
-}
+}*/
 
 int main() {
     auto printer = print(std::cout);

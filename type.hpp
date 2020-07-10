@@ -5,15 +5,24 @@
 struct real_type;
 struct struct_type;
 struct func_type;
+struct null_type;
 
 struct typeobj {
     virtual std::string id() const = 0;
     virtual real_type*   is_real()   {return nullptr;}
     virtual struct_type* is_struct() {return nullptr;}
     virtual func_type*   is_func()   {return nullptr;}
+    virtual null_type*   is_null()   {return nullptr;}
 };
 
 using type = std::shared_ptr<typeobj>;
+
+struct null_type : typeobj {
+    virtual std::string id() const override {
+        return "null";
+    }
+    null_type* is_null() override {return this;}
+};
 
 struct real_type : typeobj {
     virtual std::string id() const override {
