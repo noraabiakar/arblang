@@ -64,13 +64,13 @@ using expr = std::shared_ptr<expression>;
 
 struct func_expr : expression {
     std::string name_;
-    std::vector <std::string> args_;
+    std::vector<std::string> args_;
     expr body_;
     type type_;
 
     func_expr(std::string name, type ret, std::vector<pair> args, expr body)
             : name_(name), body_(body) {
-        std::vector <type> types;
+        std::vector<type> types;
         for (auto a: args) {
             args_.push_back(a.name);
             types.push_back(a.t);
@@ -89,11 +89,11 @@ struct func_expr : expression {
 
 struct struct_expr : expression {
     std::string name_;
-    std::vector <std::string> fields_;
+    std::vector<std::string> fields_;
     type type_;
 
     struct_expr(std::string name, std::vector<pair> fields) : name_(name) {
-        std::vector <type> types;
+        std::vector<type> types;
         for (auto a: fields) {
             fields_.push_back(a.name);
             types.push_back(a.t);
@@ -197,7 +197,7 @@ struct access_expr : expression {
 
 struct create_expr : expression {
     expr struct_;
-    std::vector <expr> fields_;
+    std::vector<expr> fields_;
 
     create_expr(expr str, std::vector<expr> fields) : struct_(str), fields_(fields) {}
 
@@ -208,9 +208,9 @@ struct create_expr : expression {
 
 struct apply_expr : expression {
     expr func_;
-    std::vector <expr> args_;
+    std::vector<expr> args_;
 
-    apply_expr(expr func, std::vector <expr> args) : func_(func), args_(args) {}
+    apply_expr(expr func, std::vector<expr> args) : func_(func), args_(args) {}
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -221,7 +221,7 @@ struct block_expr : expression {
     std::vector<type> scoped_types_ = {std::make_shared<real_type>()};
     std::vector<expr> statements_;
 
-    block_expr(std::vector <expr> statements) {
+    block_expr(std::vector<expr> statements) {
         for (auto& s: statements) {
             if (!(s->is_func() || s->is_struct())) {
                 throw std::runtime_error("Block expressions can only contain struct or function definitions");

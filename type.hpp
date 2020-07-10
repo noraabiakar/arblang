@@ -24,9 +24,9 @@ struct real_type : typeobj {
 
 struct struct_type : typeobj {
     std::string name_;
-    std::vector <type> fields_;
+    std::vector<type> fields_;
 
-    struct_type(std::string name, std::vector <type> fields) : name_(name), fields_(fields) {}
+    struct_type(std::string name, std::vector<type> fields) : name_(name), fields_(fields) {}
 
     virtual std::string id() const override {
         return name_;
@@ -37,10 +37,10 @@ struct struct_type : typeobj {
 
 struct func_type : typeobj {
     std::string name_;
-    std::vector <type> args_;
+    std::vector<type> args_;
     type ret_;
 
-    func_type(std::string name, std::vector <type> args, type ret) : name_(name), args_(args), ret_(ret) {}
+    func_type(std::string name, std::vector<type> args, type ret) : name_(name), args_(args), ret_(ret) {}
 
     virtual std::string id() const override {
         return "";

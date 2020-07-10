@@ -8,7 +8,7 @@ void test() {
     auto let = std::make_shared<let_expr>("e", a, add);
 
     auto real = std::make_shared<real_type>();
-    std::vector <pair> l = {pair{"m0", real}, pair{"m1", real}};
+    std::vector<pair> l = {pair{"m0", real}, pair{"m1", real}};
     auto str = std::make_shared<struct_expr>("st", l);
 
 
