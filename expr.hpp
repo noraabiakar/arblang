@@ -12,6 +12,7 @@ struct pair {
     type t;
 };
 
+struct expression;
 struct func_expr;
 struct struct_expr;
 struct real_expr;
@@ -25,21 +26,26 @@ struct access_expr;
 struct create_expr;
 struct apply_expr;
 struct block_expr;
+struct nested_expr;
+struct halt_expr;
 
 struct visitor {
-    virtual void visit(const func_expr&)   = 0;
-    virtual void visit(const struct_expr&) = 0;
-    virtual void visit(const real_expr&)   = 0;
-    virtual void visit(const var_expr&)    = 0;
-    virtual void visit(const let_expr&)    = 0;
-    virtual void visit(const add_expr&)    = 0;
-    virtual void visit(const sub_expr&)    = 0;
-    virtual void visit(const mul_expr&)    = 0;
-    virtual void visit(const div_expr&)    = 0;
-    virtual void visit(const access_expr&) = 0;
-    virtual void visit(const create_expr&) = 0;
-    virtual void visit(const apply_expr&)  = 0;
-    virtual void visit(const block_expr&)  = 0;
+    virtual void visit(const expression&)  = 0;
+    virtual void visit(const func_expr& e)   {visit((expression&) e);};
+    virtual void visit(const struct_expr& e) {visit((expression&) e);};
+    virtual void visit(const real_expr& e)   {visit((expression&) e);};
+    virtual void visit(const var_expr& e)    {visit((expression&) e);};
+    virtual void visit(const let_expr& e)    {visit((expression&) e);};
+    virtual void visit(const add_expr& e)    {visit((expression&) e);};
+    virtual void visit(const sub_expr& e)    {visit((expression&) e);};
+    virtual void visit(const mul_expr& e)    {visit((expression&) e);};
+    virtual void visit(const div_expr& e)    {visit((expression&) e);};
+    virtual void visit(const access_expr& e) {visit((expression&) e);};
+    virtual void visit(const create_expr& e) {visit((expression&) e);};
+    virtual void visit(const apply_expr& e)  {visit((expression&) e);};
+    virtual void visit(const block_expr& e)  {visit((expression&) e);};
+    virtual void visit(const nested_expr& e) {visit((expression&) e);};
+    virtual void visit(const halt_expr& e)   {visit((expression&) e);};;
 };
 
 struct expression {
@@ -58,6 +64,7 @@ struct expression {
     virtual create_expr*  is_create()   {return nullptr;}
     virtual apply_expr*   is_apply()    {return nullptr;}
     virtual block_expr*   is_block()    {return nullptr;}
+    virtual nested_expr*  is_nested()   {return nullptr;}
 };
 
 using expr = std::shared_ptr<expression>;
@@ -67,6 +74,8 @@ struct func_expr : expression {
     std::vector<std::string> args_;
     expr body_;
     type type_;
+
+    expr scope_;
 
     func_expr(std::string name, type ret, std::vector<pair> args, expr body)
             : name_(name), body_(body) {
@@ -91,6 +100,8 @@ struct struct_expr : expression {
     std::string name_;
     std::vector<std::string> fields_;
     type type_;
+
+    expr scope_;
 
     struct_expr(std::string name, std::vector<pair> fields) : name_(name) {
         std::vector<type> types;
@@ -133,9 +144,9 @@ struct var_expr : expression {
 struct let_expr : expression {
     std::string var_;
     expr val_;
-    expr body_;
+    expr scope_;
 
-    let_expr(std::string var, expr val, expr body) : var_(var), val_(val), body_(body) {}
+    let_expr(std::string var, expr val, expr scope) : var_(var), val_(val), scope_(scope) {}
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -268,11 +279,36 @@ struct block_expr : expression {
     block_expr* is_block() override {return this;}
 };
 
+struct halt_expr : expression {
+    virtual void accept(visitor& v) const override { v.visit(*this); };
+};
+
+struct nested_expr: expression {
+    std::vector<type> scoped_types_;
+    expr statement_;
+
+    nested_expr(block_expr* b): scoped_types_(b->scoped_types_) {
+        for (unsigned i = 0; i < b->statements_.size(); ++i) {
+            auto& s0_scope = b->statements_[i]->is_func() ? b->statements_[i]->is_func()->scope_ : b->statements_[i]->is_struct()->scope_;
+            if (i == b->statements_.size() -1) {
+                s0_scope = std::make_shared<halt_expr>();
+            } else {
+                s0_scope = b->statements_[i+1];
+            };
+        }
+
+        statement_ = b->statements_.front();
+    }
+
+    virtual void accept(visitor& v) const override { v.visit(*this); };
+
+    nested_expr* is_nested() override {return this;}
+};
+
 struct print : visitor {
     std::ostream& out_;
-    int indent_;
 
-    print(std::ostream& out, int indent = 0) : indent_(indent), out_(out) {}
+    print(std::ostream& out) : out_(out) {}
 
     virtual void visit(const func_expr& e) override {
         out_ << "(let_f (" << e.name_ << " (";
@@ -283,7 +319,7 @@ struct print : visitor {
         }
         out_ << ") ";
         e.body_->accept(*this);
-        out_ << ")))\n";
+        out_ << "))\n";
     }
 
     virtual void visit(const struct_expr& e) override {
@@ -302,14 +338,6 @@ struct print : visitor {
 
     virtual void visit(const var_expr& e) override {
         out_ << e.name_;
-    }
-
-    virtual void visit(const let_expr& e) override {
-        out_ << "(let (" << e.var_ << " (";
-        e.val_->accept(*this);
-        out_ << ")) ";
-        e.body_->accept(*this);
-        out_ << ")";
     }
 
     virtual void visit(const add_expr& e) override {
@@ -355,15 +383,144 @@ struct print : visitor {
             a->accept(*this);
             out_ << " ";
         }
-    }
-
-    virtual void visit(const apply_expr& e) override {
+        out_ << "))";
     }
 
     virtual void visit(const block_expr& e) override {
         for (auto& s: e.statements_) {
             s->accept(*this);
         }
+    }
+
+    virtual void visit(const expression& e) override {}
+};
+
+struct print_ir : visitor {
+    std::ostream& out_;
+    int indent_;
+
+    print_ir(std::ostream& out) : out_(out), indent_(0) {}
+
+    virtual void visit(const func_expr& e) override {
+        out_ << "(let_f (" << e.name_ << " (";
+
+        auto t = e.type_->is_func();
+        for (unsigned i = 0; i < e.args_.size(); ++i) {
+            out_ << e.args_[i] << ":" << t->args_[i]->id() << " ";
+        }
+        out_ << ") ";
+        e.body_->accept(*this);
+        out_ << ")\n";
+
+        out_ << move(indent_) << "in";
+        indent_+=4;
+
+        e.scope_->accept(*this);
+
+        indent_-=4;
+        out_ << "\n" << move(indent_) << ")";
+
+    }
+
+    virtual void visit(const struct_expr& e) override {
+        out_ << "(let_s (" << e.name_ << " (";
+
+        auto t = e.type_->is_struct();
+        for (unsigned i = 0; i < e.fields_.size(); ++i) {
+            out_ << e.fields_[i] << ":" << t->fields_[i]->id() << " ";
+        }
+        out_ << "))\n";
+
+        out_ << move(indent_) << "in";
+        indent_+=4;
+
+        e.scope_->accept(*this);
+
+        indent_-=4;
+        out_ << "\n" << move(indent_) << ")";
+    }
+
+    virtual void visit(const real_expr& e) override {
+        out_ << e.val_;
+    }
+
+    virtual void visit(const var_expr& e) override {
+        out_ << e.name_;
+    }
+
+    virtual void visit(const let_expr& e) override {
+        out_ << "(let (" << e.var_ << " (";
+        e.val_->accept(*this);
+        out_ << "))\n";
+
+        indent_+=4;
+        out_ << move(indent_) << "in";
+
+        e.scope_->accept(*this);
+
+        out_ << "\n" << move(indent_) << ")";
+        indent_-=4;
+    }
+
+    virtual void visit(const add_expr& e) override {
+        out_ << "( + ";
+        e.lhs_->accept(*this);
+        out_ << " ";
+        e.rhs_->accept(*this);
+        out_ << ")";
+    }
+
+    virtual void visit(const sub_expr& e) override {
+        out_ << "( - ";
+        e.lhs_->accept(*this);
+        out_ << " ";
+        e.rhs_->accept(*this);
+        out_ << ")";
+    }
+
+    virtual void visit(const mul_expr& e) override {
+        out_ << "( * ";
+        e.lhs_->accept(*this);
+        out_ << " ";
+        e.rhs_->accept(*this);
+        out_ << ")";
+    }
+
+    virtual void visit(const div_expr& e) override {
+        out_ << "( / ";
+        e.lhs_->accept(*this);
+        out_ << " ";
+        e.rhs_->accept(*this);
+        out_ << ")";
+    }
+
+    virtual void visit(const access_expr& e) override {
+        out_ << e.struct_->is_struct()->name_ << "." << e.field_;
+    }
+
+    virtual void visit(const create_expr& e) override {
+        auto s = e.struct_->is_struct();
+        out_ << "(create " << s->name_ << "(";
+        for (auto& a: e.fields_) {
+            a->accept(*this);
+            out_ << " ";
+        }
+        out_ << "))";
+    }
+
+    virtual void visit(const nested_expr& e) override {
+        e.statement_->accept(*this);
+    }
+
+    virtual void visit(const halt_expr& e) override {
+        out_ << "()";
+    }
+
+    virtual void visit(const expression& e) override {}
+
+private:
+    std::string move(int x) {
+        return std::string(x, ' ');
     }
 };
 

@@ -17,7 +17,7 @@ void test() {
     auto sub = std::make_shared<sub_expr>(m0, m1);
     auto fun = std::make_shared<func_expr>("fun", real, l, sub);
 
-    auto printer = print(std::cout, 2);
+    auto printer = print(std::cout);
 
     i->accept(printer);
     std::cout << std::endl << std::endl;
@@ -39,7 +39,9 @@ void test() {
 }
 
 int main() {
-    auto printer = print(std::cout, 2);
+    auto printer = print(std::cout);
+    auto ir_printer = print_ir(std::cout);
+
     auto real = std::make_shared<real_type>();
 
     auto ion_state       = std::make_shared<struct_expr>("ion-state",       std::vector<pair>{{"iconc", real}, {"econc", real}});
@@ -64,6 +66,11 @@ int main() {
     auto block = std::make_shared<block_expr>(std::vector<expr>{current_contrib, ion_state, cell, state, param, current});
 
     block->accept(printer);
+    std::cout << "\n------------------------------------------------------\n";
+
+    auto nest = std::make_shared<nested_expr>(block.get());
+    nest->accept(ir_printer);
+    std::cout << "\n------------------------------------------------------\n";
 
     return 0;
 }
