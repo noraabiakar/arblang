@@ -278,7 +278,6 @@ struct access_expr : expression {
     }
 
     virtual type signature() const override {
-
         return struct_->is_struct()->signature()->is_struct()->fields_[index_];
     }
 

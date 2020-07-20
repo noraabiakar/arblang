@@ -1,4 +1,4 @@
-#include "expr.hpp"
+#include "core_arblang.hpp"
 
 /*void test() {
     auto a = std::make_shared<var_expr>("a");
@@ -38,6 +38,7 @@
     std::cout << std::endl << std::endl;
 }*/
 
+/*
 int main() {
     auto printer = print(std::cout);
     auto ir_printer = print_ir(std::cout);
@@ -70,6 +71,37 @@ int main() {
 
     auto nest = std::make_shared<nested_expr>(block.get());
     nest->accept(ir_printer);
+    std::cout << "\n------------------------------------------------------\n";
+
+    return 0;
+}
+*/
+
+int main() {
+    using namespace core;
+    auto printer = print(std::cout);
+
+    auto ion_state       = std::make_shared<struct_expr>("ion-state",       std::vector<typed_var>{{"iconc", "float"}, {"econc", "float"}});
+    auto current_contrib = std::make_shared<struct_expr>("current_contrib", std::vector<typed_var>{{"i", "float"}, {"g", "float"}});
+    auto cell  = std::make_shared<struct_expr>("cell",  std::vector<typed_var>{{"v", "float"}, {"temp", "float"}, {"leak", "ion_state"}});
+    auto state = std::make_shared<struct_expr>("state", std::vector<typed_var>{{"m", "float"}});
+    auto param = std::make_shared<struct_expr>("param", std::vector<typed_var>{{"g0", "float"}, {"erev", "float"}});
+
+    auto v    = std::make_shared<access_expr>("c", "v");
+    auto erev = std::make_shared<access_expr>("p", "erev");
+    auto g0   = std::make_shared<access_expr>("p", "g0");
+    auto m    = std::make_shared<access_expr>("s", "m");
+
+    auto i = std::make_shared<binary_expr>(std::make_shared<binary_expr>(std::make_shared<binary_expr>(v, erev, operation::sub), g0, mul), m, operation::mul);
+    auto g = std::make_shared<binary_expr>(g0, m, operation::mul);
+
+    auto current = std::make_shared<func_expr>("current",
+                                               std::vector<typed_var>{{"p", "param"}, {"s", "state"}, {"c", "cell"}},
+                                               std::make_shared<create_expr>("current_contrib", std::vector<expr>{i, g}));
+
+    auto block = std::make_shared<block_expr>(std::vector<expr>{current_contrib, ion_state, cell, state, param, current});
+
+    block->accept(printer);
     std::cout << "\n------------------------------------------------------\n";
 
     return 0;
