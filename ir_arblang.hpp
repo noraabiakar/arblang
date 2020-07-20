@@ -149,46 +149,20 @@ struct let_rep : ir_expression {
 struct binary_expr : ir_expression {
     ir_ptr lhs_;
     ir_ptr rhs_;
+    operation op_;
 
-    add_expr(expr lhs, expr rhs) : lhs_(lhs), rhs_(rhs) {
-        if (!(lhs->signature()->is_real()) ||
-            !(rhs->signature()->is_real()) ) {
-            throw std::runtime_error("invalid argument types to add");
-        }
-    }
-
-    virtual type signature() const override {
-        return std::make_shared<real_type>();
-    }
+    binary_expr(ir_ptr lhs, ir_ptr rhs, operation op) : lhs_(lhs), rhs_(rhs), op_(op) {}
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
-    add_expr* is_add() override {return this;}
+    add_expr* is_binary() override {return this;}
 };
 
 struct access_rep : ir_expression {
-    ir_ptr struct_;
-    std::string field_;
-    unsigned index_;
+    ir_ptr var_;
+    ir_ptr field_;
 
-    access_rep(ir_ptr str, std::string field) : struct_(str), field_(field) {
-        if (!struct_->is_struct()) {
-            throw std::runtime_error("cannot access field of a non-struct type");
-        }
-
-        auto& flds = struct_->is_struct()->fields_;
-        auto it = std::find_if(flds.begin(), flds.end(), [&](auto& f){return f == field_;});
-
-        if (it == flds.end()) {
-            throw std::runtime_error("field " + field_ + " does not exist in " + struct_->is_struct()->name_);
-        }
-        index_ = it - flds.begin();
-
-    }
-
-    virtual type signature() const override {
-        return struct_->is_struct()->signature()->is_struct()->fields_[index_];
-    }
+    access_rep(ir_ptr var, ir_ptr field) : var_(var_), field_(field) {}
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -196,18 +170,10 @@ struct access_rep : ir_expression {
 };
 
 struct create_rep : ir_expression {
-    ir_ptr struct_;
-    std::vector<expr> fields_;
+    ir_ptr object_;
+    std::vector<ir_ptr> fields_;
 
-    create_rep(ir_ptr str, std::vector<expr> fields) : struct_(str), fields_(fields) {
-        if (!struct_->is_struct()) {
-            throw std::runtime_error("cannot create create_rep out of a non-struct type");
-        }
-    }
-
-    virtual type signature() const override {
-        return struct_->is_struct()->signature();
-    }
+    create_rep(ir_ptr obj, std::vector<ir_ptr> fields) : object_(obj), fields_(fields) {}
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -216,17 +182,9 @@ struct create_rep : ir_expression {
 
 struct apply_rep : ir_expression {
     ir_ptr func_;
-    std::vector<expr> args_;
+    std::vector<ir_ptr> args_;
 
-    apply_rep(ir_ptr func, std::vector<expr> args) : func_(func), args_(args) {
-        if (!func_->is_func()){
-            throw std::runtime_error("cannot apply a non-function type");
-        }
-    }
-
-    virtual type signature() const override {
-        return func_->is_func()->signature()->is_func()->ret_;
-    }
+    apply_rep(ir_ptr func, std::vector<ir_ptr> args) : func_(func), args_(args) {}
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -234,255 +192,46 @@ struct apply_rep : ir_expression {
 };
 
 struct halt_rep : ir_expression {
-    virtual type signature() const override {
-        return std::make_shared<null_type>();
-    }
     virtual void accept(visitor& v) const override { v.visit(*this); };
 };
 
 struct nested_rep: ir_expression {
-    std::vector<type> scoped_types_;
     ir_ptr statement_;
 
-    nested_rep(block_expr* b): scoped_types_(b->scoped_types_) {
-        for (unsigned i = 0; i < b->statements_.size(); ++i) {
-            auto& s0_scope = b->statements_[i]->is_func() ? b->statements_[i]->is_func()->scope_ : b->statements_[i]->is_struct()->scope_;
-            if (i == b->statements_.size() -1) {
-                s0_scope = std::make_shared<halt_rep>();
-            } else {
-                s0_scope = b->statements_[i+1];
-            };
-        }
-
-        statement_ = b->statements_.front();
-    }
-
-    virtual type signature() const override {
-        return std::make_shared<null_type>();
-    }
+    nested_rep(ir_ptr statement): statement_(statement) {}
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
     nested_rep* is_nested() override {return this;}
 };
 
-struct print : visitor {
-    std::ostream& out_;
+struct create_ir : visitor {
+    const std::unordered_map<std::string, type_ptr>& def_types
+    std::vector<ir_ptr> statements_;
 
-    print(std::ostream& out) : out_(out) {}
+    virtual void visit(const func_rep& e) override {}
 
-    virtual void visit(const func_rep& e) override {
-        out_ << "(let_f (" << e.name_ << " (";
+    virtual void visit(const struct_rep& e) override {}
 
-        auto t = e.type_->is_func();
-        for (unsigned i = 0; i < e.args_.size(); ++i) {
-            out_ << e.args_[i] << ":" << t->args_[i]->id() << " ";
-        }
-        out_ << ") ";
-        e.body_->accept(*this);
-        out_ << "))\n";
-    }
+    virtual void visit(const real_expr& e) override {}
 
-    virtual void visit(const struct_rep& e) override {
-        out_ << "(let_s (" << e.name_ << " (";
+    virtual void visit(const varref_rep& e) override {}
 
-        auto t = e.type_->is_struct();
-        for (unsigned i = 0; i < e.fields_.size(); ++i) {
-            out_ << e.fields_[i] << ":" << t->fields_[i]->id() << " ";
-        }
-        out_ << ")))\n";
-    }
+    virtual void visit(const add_expr& e) override {}
 
-    virtual void visit(const real_expr& e) override {
-        out_ << e.val_;
-    }
+    virtual void visit(const sub_expr& e) override {}
 
-    virtual void visit(const varref_rep& e) override {
-        out_ << e.name_;
-    }
+    virtual void visit(const mul_expr& e) override {}
 
-    virtual void visit(const add_expr& e) override {
-        out_ << "( + ";
-        e.lhs_->accept(*this);
-        out_ << " ";
-        e.rhs_->accept(*this);
-        out_ << ")";
-    }
+    virtual void visit(const div_expr& e) override {}
 
-    virtual void visit(const sub_expr& e) override {
-        out_ << "( - ";
-        e.lhs_->accept(*this);
-        out_ << " ";
-        e.rhs_->accept(*this);
-        out_ << ")";
-    }
+    virtual void visit(const access_rep& e) override {}
 
-    virtual void visit(const mul_expr& e) override {
-        out_ << "( * ";
-        e.lhs_->accept(*this);
-        out_ << " ";
-        e.rhs_->accept(*this);
-        out_ << ")";
-    }
+    virtual void visit(const create_rep& e) override {}
 
-    virtual void visit(const div_expr& e) override {
-        out_ << "( / ";
-        e.lhs_->accept(*this);
-        out_ << " ";
-        e.rhs_->accept(*this);
-        out_ << ")";
-    }
-
-    virtual void visit(const access_rep& e) override {
-        out_ << e.struct_->is_struct()->name_ << "." << e.field_;
-    }
-
-    virtual void visit(const create_rep& e) override {
-        auto s = e.struct_->is_struct();
-        out_ << "(create " << s->name_ << "(";
-        for (auto& a: e.fields_) {
-            a->accept(*this);
-            out_ << " ";
-        }
-        out_ << "))";
-    }
-
-    virtual void visit(const block_expr& e) override {
-        for (auto& s: e.statements_) {
-            s->accept(*this);
-        }
-    }
+    virtual void visit(const block_expr& e) override {}
 
     virtual void visit(const ir_expression& e) override {}
-};
-
-struct print_ir : visitor {
-    std::ostream& out_;
-    int indent_;
-
-    print_ir(std::ostream& out) : out_(out), indent_(0) {}
-
-    virtual void visit(const func_rep& e) override {
-        out_ << "(let_f (" << e.name_ << " (";
-
-        auto t = e.type_->is_func();
-        for (unsigned i = 0; i < e.args_.size(); ++i) {
-            out_ << e.args_[i] << ":" << t->args_[i]->id() << " ";
-        }
-        out_ << ") ";
-        e.body_->accept(*this);
-        out_ << ")\n";
-
-        out_ << move(indent_) << "in";
-        indent_+=4;
-
-        e.scope_->accept(*this);
-
-        indent_-=4;
-        out_ << "\n" << move(indent_) << ")";
-
-    }
-
-    virtual void visit(const struct_rep& e) override {
-        out_ << "(let_s (" << e.name_ << " (";
-
-        auto t = e.type_->is_struct();
-        for (unsigned i = 0; i < e.fields_.size(); ++i) {
-            out_ << e.fields_[i] << ":" << t->fields_[i]->id() << " ";
-        }
-        out_ << "))\n";
-
-        out_ << move(indent_) << "in";
-        indent_+=4;
-
-        e.scope_->accept(*this);
-
-        indent_-=4;
-        out_ << "\n" << move(indent_) << ")";
-    }
-
-    virtual void visit(const real_expr& e) override {
-        out_ << e.val_;
-    }
-
-    virtual void visit(const varref_rep& e) override {
-        out_ << e.name_;
-    }
-
-    virtual void visit(const let_rep& e) override {
-        out_ << "(let (" << e.var_ << " (";
-        e.val_->accept(*this);
-        out_ << "))\n";
-
-        indent_+=4;
-        out_ << move(indent_) << "in";
-
-        e.scope_->accept(*this);
-
-        out_ << "\n" << move(indent_) << ")";
-        indent_-=4;
-    }
-
-    virtual void visit(const add_expr& e) override {
-        out_ << "( + ";
-        e.lhs_->accept(*this);
-        out_ << " ";
-        e.rhs_->accept(*this);
-        out_ << ")";
-    }
-
-    virtual void visit(const sub_expr& e) override {
-        out_ << "( - ";
-        e.lhs_->accept(*this);
-        out_ << " ";
-        e.rhs_->accept(*this);
-        out_ << ")";
-    }
-
-    virtual void visit(const mul_expr& e) override {
-        out_ << "( * ";
-        e.lhs_->accept(*this);
-        out_ << " ";
-        e.rhs_->accept(*this);
-        out_ << ")";
-    }
-
-    virtual void visit(const div_expr& e) override {
-        out_ << "( / ";
-        e.lhs_->accept(*this);
-        out_ << " ";
-        e.rhs_->accept(*this);
-        out_ << ")";
-    }
-
-    virtual void visit(const access_rep& e) override {
-        out_ << e.struct_->is_struct()->name_ << "." << e.field_;
-    }
-
-    virtual void visit(const create_rep& e) override {
-        auto s = e.struct_->is_struct();
-        out_ << "(create " << s->name_ << "(";
-        for (auto& a: e.fields_) {
-            a->accept(*this);
-            out_ << " ";
-        }
-        out_ << "))";
-    }
-
-    virtual void visit(const nested_rep& e) override {
-        e.statement_->accept(*this);
-    }
-
-    virtual void visit(const halt_rep& e) override {
-        out_ << "()";
-    }
-
-    virtual void visit(const ir_expression& e) override {}
-
-private:
-    std::string move(int x) {
-        return std::string(x, ' ');
-    }
 };
 
 } //namespace ir

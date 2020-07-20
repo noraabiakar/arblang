@@ -113,6 +113,7 @@ struct varref_expr : expression {
     std::string var_;
     std::string type_;
 
+    varref_expr(std::string var) : var_(var) {}
     varref_expr(std::string var, std::string type) : var_(var), type_(type) {}
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
@@ -226,7 +227,11 @@ struct print : visitor {
     }
 
     virtual void visit(const varref_expr& e) override {
-        out_ << e.var_ << ":" << e.type_;
+        if (e.type_.empty()) {
+            out_ << e.var_;
+        } else {
+            out_ << e.var_ << ":" << e.type_;
+        }
     }
 
     virtual void visit(const let_expr& e) override {
