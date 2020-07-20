@@ -69,11 +69,15 @@ using expr_ptr = std::shared_ptr<expression>;
 struct func_expr : expression {
     std::string ret_;
     std::string name_;
-    std::vector<typed_var> args_;
+    std::vector<expr_ptr> args_;
     expr_ptr body_;
 
     func_expr(std::string ret, std::string name, std::vector<typed_var> args, expr_ptr body)
-    : ret_(ret), name_(name), args_(args), body_(body) {}
+    : ret_(ret), name_(name), body_(body) {
+        for (const auto& t: args) {
+            args_.emplace_back(std::make_shared<varref_expr>(t.var, t.type));
+        }
+    }
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -82,9 +86,13 @@ struct func_expr : expression {
 
 struct struct_expr : expression {
     std::string name_;
-    std::vector<typed_var> fields_;
+    std::vector<expr_ptr> fields_;
 
-    struct_expr(std::string name, std::vector<typed_var> fields) : name_(name), fields_(fields) {}
+    struct_expr(std::string name, std::vector<typed_var> fields) : name_(name) {
+        for (const auto& t: fields) {
+            fields_.emplace_back(std::make_shared<varref_expr>(t.var, t.type));
+        }
+    }
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -103,8 +111,9 @@ struct float_expr : expression {
 
 struct varref_expr : expression {
     std::string var_;
+    std::string type_;
 
-    varref_expr(std::string var) : var_(var) {}
+    varref_expr(std::string var, std::string type) : var_(var), type_(type) {}
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -112,11 +121,12 @@ struct varref_expr : expression {
 };
 
 struct let_expr : expression {
-    typed_var var_;
+    expr_ptr var_;
     expr_ptr val_;
     expr_ptr body_;
 
-    let_expr(typed_var var, expr_ptr val, expr_ptr body) : var_(var), val_(val), body_(body) {}
+    let_expr(typed_var var, expr_ptr val, expr_ptr body) :
+    var_(std::make_shared<varref_expr>(var.var, var.type)), val_(val), body_(body) {}
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -193,7 +203,8 @@ struct print : visitor {
         out_ << "(" << e.ret_ << " let_f (" << e.name_ << " (";
 
         for (auto& a: e.args_) {
-            out_ << a.var << ":" << a.type << " ";
+            a->accept(*this);
+            out_ << " ";
         }
         out_ << ") ";
         e.body_->accept(*this);
@@ -204,7 +215,8 @@ struct print : visitor {
         out_ << "(let_s (" << e.name_ << " (";
 
         for (auto& f: e.fields_) {
-            out_ << f.var << ":" << f.type << " ";
+            f->accept(*this);
+            out_ << " ";
         }
         out_ << ")))\n";
     }
@@ -214,11 +226,13 @@ struct print : visitor {
     }
 
     virtual void visit(const varref_expr& e) override {
-        out_ << e.var_;
+        out_ << e.var_ << ":" << e.type_;
     }
 
     virtual void visit(const let_expr& e) override {
-        out_ << "(let \t(" << e.var_.type << " " << e.var_.var << " (";
+        out_ << "(let \t(";
+        e.var_->accept(*this);
+        out_ << " (";
         e.val_->accept(*this);
         out_ << "))\nin\t";
 
