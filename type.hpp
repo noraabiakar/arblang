@@ -1,44 +1,46 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
-struct real_type;
+#include "core_arblang.hpp"
+using core::typed_var;
+
+struct float_type;
 struct struct_type;
 struct func_type;
-struct null_type;
 
 struct typeobj {
     virtual std::string id() const = 0;
-    virtual real_type*   is_real()   {return nullptr;}
+    virtual float_type*  is_float()  {return nullptr;}
     virtual struct_type* is_struct() {return nullptr;}
     virtual func_type*   is_func()   {return nullptr;}
-    virtual null_type*   is_null()   {return nullptr;}
 };
 
-using type = std::shared_ptr<typeobj>;
+using type_ptr = std::shared_ptr<typeobj>;
 
-struct null_type : typeobj {
-    virtual std::string id() const override {
-        return "null";
-    }
-    null_type* is_null() override {return this;}
+struct field {
+    std::string name;
+    type_ptr    type;
 };
 
-struct real_type : typeobj {
-    virtual std::string id() const override {
-        return "real";
-    }
-    real_type* is_real() override {return this;}
+struct float_type : typeobj {
+    float_type* is_float() override {return this;}
 };
 
 struct struct_type : typeobj {
     std::string name_;
-    std::vector<type> fields_;
+    std::vector<field> fields_;
 
-    struct_type(std::string name, std::vector<type> fields) : name_(name), fields_(fields) {}
-
-    virtual std::string id() const override {
-        return name_;
+    struct_type(std::string name, std::vector<typed_var> fields, const std::unordered_map<std::string, type_ptr>& def_types)
+    : name_(name) {
+        for (auto& f: fields) {
+            auto it = def_types.find(f.type);
+            if (it == def_types.end()) {
+                throw std::runtime_error("Struct \"" + name_ + "\"'s field \"" + f.var + "\" has undefined \"" + f.type + "\" type");
+            }
+            fields_.emplace_back(f.var, it->second);
+        }
     }
 
     struct_type* is_struct() override {return this;}
@@ -46,15 +48,24 @@ struct struct_type : typeobj {
 
 struct func_type : typeobj {
     std::string name_;
-    std::vector<type> args_;
-    type ret_;
+    type_ptr ret_;
+    std::vector<field> args_;
 
-    func_type(std::string name, std::vector<type> args, type ret) : name_(name), args_(args), ret_(ret) {}
-
-    virtual std::string id() const override {
-        return "";
+    func_type(std::string name, std::string ret, std::vector<typed_var> args, const std::unordered_map<std::string, type_ptr>& def_types)
+    : name_(name) {
+        for (auto& a: args) {
+            auto it = def_types.find(a.type);
+            if (it == def_types.end()) {
+                throw std::runtime_error("Function \"" + name_ + "\"'s argument \"" + a.var + "\" has undefined \"" + a.type + "\" type");
+            }
+            args_.emplace_back(a.var, it->second);
+        }
+        auto it = def_types.find(ret);
+        if (it == def_types.end()) {
+            throw std::runtime_error("Function \"" + name_ + "\"'s return type \"" + a.type + "\" is undefined");
+        }
+        ret_ = it->second;
     }
 
     func_type* is_func() override {return this;}
-
 };

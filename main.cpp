@@ -62,7 +62,7 @@ int main() {
     auto current = std::make_shared<func_expr>("current",
                                                current_contrib->type_,
                                                std::vector<pair>{{"p", param->type_}, {"s", state->type_}, {"c", cell->type_}},
-                                               std::make_shared<create_expr>(current_contrib, std::vector<expr>{i, g}));
+                                               std::make_shared<create_expr>(current_contrib, std::vector<expr_ptr>{i, g}));
 
     auto block = std::make_shared<block_expr>(std::vector<expr>{current_contrib, ion_state, cell, state, param, current});
 
@@ -95,11 +95,14 @@ int main() {
     auto i = std::make_shared<binary_expr>(std::make_shared<binary_expr>(std::make_shared<binary_expr>(v, erev, operation::sub), g0, mul), m, operation::mul);
     auto g = std::make_shared<binary_expr>(g0, m, operation::mul);
 
-    auto current = std::make_shared<func_expr>("current",
+    auto current = std::make_shared<func_expr>("current-contrib",
+                                               "current",
                                                std::vector<typed_var>{{"p", "param"}, {"s", "state"}, {"c", "cell"}},
-                                               std::make_shared<create_expr>("current_contrib", std::vector<expr>{i, g}));
+                                               std::make_shared<create_expr>("current_contrib", std::vector<expr_ptr>{i, g}));
 
-    auto block = std::make_shared<block_expr>(std::vector<expr>{current_contrib, ion_state, cell, state, param, current});
+    auto weighted_current  = std::make_shared<let_expr>(typed_var{"w", "float"}, std::make_shared<float_expr>(0.1), current);
+
+    auto block = std::make_shared<block_expr>(std::vector<expr_ptr>{current_contrib, ion_state, cell, state, param, weighted_current});
 
     block->accept(printer);
     std::cout << "\n------------------------------------------------------\n";

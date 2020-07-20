@@ -64,14 +64,16 @@ struct expression {
     virtual halt_expr*    is_halt()     {return nullptr;}
 };
 
-using expr = std::shared_ptr<expression>;
+using expr_ptr = std::shared_ptr<expression>;
 
 struct func_expr : expression {
+    std::string ret_;
     std::string name_;
     std::vector<typed_var> args_;
-    expr body_;
+    expr_ptr body_;
 
-    func_expr(std::string name, std::vector<typed_var> args, expr body): name_(name), args_(args), body_(body) {}
+    func_expr(std::string ret, std::string name, std::vector<typed_var> args, expr_ptr body)
+    : ret_(ret), name_(name), args_(args), body_(body) {}
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -111,10 +113,10 @@ struct varref_expr : expression {
 
 struct let_expr : expression {
     typed_var var_;
-    expr val_;
-    expr body_;
+    expr_ptr val_;
+    expr_ptr body_;
 
-    let_expr(typed_var var, expr val, expr body) : var_(var), val_(val), body_(body) {}
+    let_expr(typed_var var, expr_ptr val, expr_ptr body) : var_(var), val_(val), body_(body) {}
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -122,11 +124,11 @@ struct let_expr : expression {
 };
 
 struct binary_expr : expression {
-    expr lhs_;
-    expr rhs_;
+    expr_ptr lhs_;
+    expr_ptr rhs_;
     operation op_;
 
-    binary_expr(expr lhs, expr rhs, operation op) : lhs_(lhs), rhs_(rhs), op_(op) {}
+    binary_expr(expr_ptr lhs, expr_ptr rhs, operation op) : lhs_(lhs), rhs_(rhs), op_(op) {}
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -146,9 +148,9 @@ struct access_expr : expression {
 
 struct create_expr : expression {
     std::string struct_;
-    std::vector<expr> fields_;
+    std::vector<expr_ptr> fields_;
 
-    create_expr(std::string str, std::vector<expr> fields) : struct_(str), fields_(fields) {}
+    create_expr(std::string str, std::vector<expr_ptr> fields) : struct_(str), fields_(fields) {}
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -157,9 +159,9 @@ struct create_expr : expression {
 
 struct apply_expr : expression {
     std::string func_;
-    std::vector<expr> args_;
+    std::vector<expr_ptr> args_;
 
-    apply_expr(std::string func, std::vector<expr> args) : func_(func), args_(args) {}
+    apply_expr(std::string func, std::vector<expr_ptr> args) : func_(func), args_(args) {}
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -167,9 +169,9 @@ struct apply_expr : expression {
 };
 
 struct block_expr : expression {
-    std::vector<expr> statements_;
+    std::vector<expr_ptr> statements_;
 
-    block_expr(std::vector<expr> statements): statements_(statements){}
+    block_expr(std::vector<expr_ptr> statements): statements_(statements){}
 
     virtual void accept(visitor& v) const override { v.visit(*this); };
 
@@ -188,7 +190,7 @@ struct print : visitor {
     print(std::ostream& out) : out_(out) {}
 
     virtual void visit(const func_expr& e) override {
-        out_ << "(let_f (" << e.name_ << " (";
+        out_ << "(" << e.ret_ << " let_f (" << e.name_ << " (";
 
         for (auto& a: e.args_) {
             out_ << a.var << ":" << a.type << " ";
@@ -213,6 +215,16 @@ struct print : visitor {
 
     virtual void visit(const varref_expr& e) override {
         out_ << e.var_;
+    }
+
+    virtual void visit(const let_expr& e) override {
+        out_ << "(let \t(" << e.var_.type << " " << e.var_.var << " (";
+        e.val_->accept(*this);
+        out_ << "))\nin\t";
+
+        e.body_->accept(*this);
+
+        out_ << ")\n";
     }
 
     virtual void visit(const binary_expr& e) override {
