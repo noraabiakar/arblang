@@ -1,3 +1,5 @@
+#pragma once
+
 #include <algorithm>
 #include <iostream>
 #include <memory>
@@ -7,6 +9,8 @@
 
 //Desugared language
 namespace core {
+
+struct visitor;
 
 struct expression;
 struct func_expr;
@@ -21,21 +25,6 @@ struct apply_expr;
 struct block_expr;
 struct halt_expr;
 
-struct visitor {
-    virtual void visit(const expression&)  = 0;
-    virtual void visit(const func_expr& e)   {visit((expression&) e);};
-    virtual void visit(const struct_expr& e) {visit((expression&) e);};
-    virtual void visit(const float_expr& e)  {visit((expression&) e);};
-    virtual void visit(const varref_expr& e) {visit((expression&) e);};
-    virtual void visit(const let_expr& e)    {visit((expression&) e);};
-    virtual void visit(const binary_expr& e) {visit((expression&) e);};
-    virtual void visit(const access_expr& e) {visit((expression&) e);};
-    virtual void visit(const create_expr& e) {visit((expression&) e);};
-    virtual void visit(const apply_expr& e)  {visit((expression&) e);};
-    virtual void visit(const block_expr& e)  {visit((expression&) e);};
-    virtual void visit(const halt_expr& e)   {visit((expression&) e);};
-};
-
 struct typed_var {
     std::string var;
     std::string type;
@@ -49,7 +38,7 @@ enum operation {
 };
 
 struct expression {
-    virtual void accept(visitor&) const {};
+    virtual void accept(visitor&) = 0;
 
     virtual func_expr*    is_func()     {return nullptr;}
     virtual struct_expr*  is_struct()   {return nullptr;}
@@ -79,7 +68,7 @@ struct func_expr : expression {
         }
     }
 
-    virtual void accept(visitor& v) const override { v.visit(*this); };
+    void accept(visitor& v) override;
 
     func_expr* is_func() override {return this;}
 };
@@ -94,7 +83,7 @@ struct struct_expr : expression {
         }
     }
 
-    virtual void accept(visitor& v) const override { v.visit(*this); };
+    void accept(visitor& v) override;
 
     struct_expr* is_struct() override {return this;}
 };
@@ -104,7 +93,7 @@ struct float_expr : expression {
 
     float_expr(double val) : val_(val) {}
 
-    virtual void accept(visitor& v) const override { v.visit(*this); };
+    void accept(visitor& v) override;
 
     float_expr* is_float() override {return this;}
 };
@@ -116,7 +105,7 @@ struct varref_expr : expression {
     varref_expr(std::string var) : var_(var) {}
     varref_expr(std::string var, std::string type) : var_(var), type_(type) {}
 
-    virtual void accept(visitor& v) const override { v.visit(*this); };
+    void accept(visitor& v) override;
 
     varref_expr* is_varref() override {return this;}
 };
@@ -129,7 +118,7 @@ struct let_expr : expression {
     let_expr(typed_var var, expr_ptr val, expr_ptr body) :
     var_(std::make_shared<varref_expr>(var.var, var.type)), val_(val), body_(body) {}
 
-    virtual void accept(visitor& v) const override { v.visit(*this); };
+    void accept(visitor& v) override;
 
     let_expr* is_let() override {return this;}
 };
@@ -141,7 +130,7 @@ struct binary_expr : expression {
 
     binary_expr(expr_ptr lhs, expr_ptr rhs, operation op) : lhs_(lhs), rhs_(rhs), op_(op) {}
 
-    virtual void accept(visitor& v) const override { v.visit(*this); };
+    void accept(visitor& v) override;
 
     binary_expr* is_binary() override {return this;}
 };
@@ -152,7 +141,7 @@ struct access_expr : expression {
 
     access_expr(std::string object, std::string field) : object_(object), field_(field) {}
 
-    virtual void accept(visitor& v) const override { v.visit(*this); };
+    void accept(visitor& v) override;
 
     access_expr* is_access() override {return this;}
 };
@@ -163,7 +152,7 @@ struct create_expr : expression {
 
     create_expr(std::string str, std::vector<expr_ptr> fields) : struct_(str), fields_(fields) {}
 
-    virtual void accept(visitor& v) const override { v.visit(*this); };
+    void accept(visitor& v) override;
 
    create_expr* is_create() override {return this;}
 };
@@ -174,7 +163,7 @@ struct apply_expr : expression {
 
     apply_expr(std::string func, std::vector<expr_ptr> args) : func_(func), args_(args) {}
 
-    virtual void accept(visitor& v) const override { v.visit(*this); };
+    void accept(visitor& v) override;
 
     apply_expr* is_apply() override {return this;}
 };
@@ -184,115 +173,14 @@ struct block_expr : expression {
 
     block_expr(std::vector<expr_ptr> statements): statements_(statements){}
 
-    virtual void accept(visitor& v) const override { v.visit(*this); };
+    void accept(visitor& v) override;
 
     block_expr* is_block() override {return this;}
 };
 
 struct halt_expr : expression {
-    virtual void accept(visitor& v) const override { v.visit(*this); };
+    void accept(visitor& v) override;
 
     halt_expr* is_halt() override {return this;}
 };
-
-struct print : visitor {
-    std::ostream& out_;
-
-    print(std::ostream& out) : out_(out) {}
-
-    virtual void visit(const func_expr& e) override {
-        out_ << "(" << e.ret_ << " let_f (" << e.name_ << " (";
-
-        for (auto& a: e.args_) {
-            a->accept(*this);
-            out_ << " ";
-        }
-        out_ << ") ";
-        e.body_->accept(*this);
-        out_ << "))\n";
-    }
-
-    virtual void visit(const struct_expr& e) override {
-        out_ << "(let_s (" << e.name_ << " (";
-
-        for (auto& f: e.fields_) {
-            f->accept(*this);
-            out_ << " ";
-        }
-        out_ << ")))\n";
-    }
-
-    virtual void visit(const float_expr& e) override {
-        out_ << e.val_;
-    }
-
-    virtual void visit(const varref_expr& e) override {
-        if (e.type_.empty()) {
-            out_ << e.var_;
-        } else {
-            out_ << e.var_ << ":" << e.type_;
-        }
-    }
-
-    virtual void visit(const let_expr& e) override {
-        out_ << "(let \t(";
-        e.var_->accept(*this);
-        out_ << " (";
-        e.val_->accept(*this);
-        out_ << "))\nin\t";
-
-        e.body_->accept(*this);
-
-        out_ << ")\n";
-    }
-
-    virtual void visit(const binary_expr& e) override {
-        out_ << "(";
-
-        switch(e.op_) {
-            case operation::add: {
-                out_ << " + ";
-                break;
-            }
-            case operation::sub: {
-                out_ << " - ";
-                break;
-            }
-            case operation::mul: {
-                out_ << " * ";
-                break;
-            }
-            case operation::div: {
-                out_ << " / ";
-                break;
-            }
-        }
-        e.lhs_->accept(*this);
-        out_ << " ";
-        e.rhs_->accept(*this);
-        out_ << ")";
-    }
-
-    virtual void visit(const access_expr& e) override {
-        out_ << e.object_ << "." << e.field_;
-    }
-
-    virtual void visit(const create_expr& e) override {
-        out_ << "(create " << e.struct_ << "(";
-        for (auto& a: e.fields_) {
-            a->accept(*this);
-            out_ << " ";
-        }
-        out_ << "))";
-    }
-
-    virtual void visit(const block_expr& e) override {
-        for (auto& s: e.statements_) {
-            s->accept(*this);
-        }
-    }
-
-    virtual void visit(const expression& e) override {}
-};
-
 } //namespace core
