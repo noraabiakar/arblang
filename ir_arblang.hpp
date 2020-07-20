@@ -18,6 +18,7 @@ struct ir_expression;
 struct func_rep;
 struct struct_rep;
 struct float_rep;
+struct vardef_rep;
 struct varref_rep;
 struct let_rep;
 struct binary_rep;
@@ -33,6 +34,7 @@ struct ir_expression {
     virtual func_rep*    is_func()     {return nullptr;}
     virtual struct_rep*  is_struct()   {return nullptr;}
     virtual float_rep*   is_float()    {return nullptr;}
+    virtual vardef_rep*  is_vardef()   {return nullptr;}
     virtual varref_rep*  is_varref()   {return nullptr;}
     virtual let_rep*     is_let()      {return nullptr;}
     virtual binary_rep*  is_binary()   {return nullptr;}
@@ -53,7 +55,7 @@ struct func_rep : ir_expression {
     ir_ptr              scope_;     // The `in` part of let_s ... in ...
     type_ptr            type_;
 
-    func_rep(std::string name, type_ptr ret, std::vector<ir_ptr> args, ir_ptr body, ir_ptr scope);
+    func_rep(std::string name, type_ptr ret, std::vector<ir_ptr> args, ir_ptr body);
 
     void set_scope(const ir_ptr& scope) {
         scope_ = scope;
@@ -70,7 +72,7 @@ struct struct_rep : ir_expression {
     ir_ptr              scope_;     // The `in` part of let_s ... in ...
     type_ptr            type_;
 
-    struct_rep(std::string name, std::vector<ir_ptr> fields, ir_ptr scope);
+    struct_rep(std::string name, std::vector<ir_ptr> fields);
 
 
     void set_scope(const ir_ptr& scope) {
@@ -93,11 +95,22 @@ struct float_rep : ir_expression {
     float_rep* is_float() override {return this;}
 };
 
-struct varref_rep : ir_expression {
+struct vardef_rep : ir_expression {
     std::string name_;
     type_ptr type_;
 
-    varref_rep(std::string name, type_ptr t) : name_(name), type_(t) {}
+    vardef_rep(std::string name, type_ptr t) : name_(name), type_(t) {}
+
+    void accept(visitor& v) override;
+
+    vardef_rep* is_vardef() override {return this;}
+};
+
+struct varref_rep : ir_expression {
+    std::string name_;
+    ir_ptr def_; // pointer to verdef
+
+    varref_rep(std::string name, ir_ptr def) : name_(name), def_(def) {}
 
     void accept(visitor& v) override;
 
@@ -129,10 +142,10 @@ struct binary_rep : ir_expression {
 };
 
 struct access_rep : ir_expression {
-    ir_ptr var_;
-    ir_ptr field_;
+    ir_ptr var_; //varref
+    unsigned index_;
 
-    access_rep(ir_ptr var, ir_ptr field) : var_(var_), field_(field) {}
+    access_rep(ir_ptr var, unsigned index) : var_(var_), index_(index) {}
 
     void accept(visitor& v) override;
 
@@ -140,10 +153,10 @@ struct access_rep : ir_expression {
 };
 
 struct create_rep : ir_expression {
-    ir_ptr object_;
     std::vector<ir_ptr> fields_;
+    type_ptr type_;
 
-    create_rep(ir_ptr obj, std::vector<ir_ptr> fields) : object_(obj), fields_(fields) {}
+    create_rep(std::vector<ir_ptr> fields, type_ptr type) : fields_(fields), type_(type) {}
 
     void accept(visitor& v) override;
 
@@ -151,10 +164,10 @@ struct create_rep : ir_expression {
 };
 
 struct apply_rep : ir_expression {
-    ir_ptr func_;
     std::vector<ir_ptr> args_;
+    type_ptr type_;
 
-    apply_rep(ir_ptr func, std::vector<ir_ptr> args) : func_(func), args_(args) {}
+    apply_rep(std::vector<ir_ptr> args, type_ptr type) : args_(args), type_(type) {}
 
     void accept(visitor& v) override;
 

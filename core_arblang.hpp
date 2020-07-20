@@ -17,6 +17,7 @@ struct func_expr;
 struct struct_expr;
 struct float_expr;
 struct varref_expr;
+struct vardef_expr;
 struct let_expr;
 struct binary_expr;
 struct access_expr;
@@ -43,6 +44,7 @@ struct expression {
     virtual func_expr*    is_func()     {return nullptr;}
     virtual struct_expr*  is_struct()   {return nullptr;}
     virtual float_expr*   is_float()    {return nullptr;}
+    virtual vardef_expr*  is_vardef()   {return nullptr;}
     virtual varref_expr*  is_varref()   {return nullptr;}
     virtual let_expr*     is_let()      {return nullptr;}
     virtual binary_expr*  is_binary()   {return nullptr;}
@@ -64,7 +66,7 @@ struct func_expr : expression {
     func_expr(std::string ret, std::string name, std::vector<typed_var> args, expr_ptr body)
     : ret_(ret), name_(name), body_(body) {
         for (const auto& t: args) {
-            args_.emplace_back(std::make_shared<varref_expr>(t.var, t.type));
+            args_.emplace_back(std::make_shared<vardef_expr>(t.var, t.type));
         }
     }
 
@@ -79,7 +81,7 @@ struct struct_expr : expression {
 
     struct_expr(std::string name, std::vector<typed_var> fields) : name_(name) {
         for (const auto& t: fields) {
-            fields_.emplace_back(std::make_shared<varref_expr>(t.var, t.type));
+            fields_.emplace_back(std::make_shared<vardef_expr>(t.var, t.type));
         }
     }
 
@@ -98,12 +100,21 @@ struct float_expr : expression {
     float_expr* is_float() override {return this;}
 };
 
-struct varref_expr : expression {
+struct vardef_expr : expression {
     std::string var_;
     std::string type_;
 
+    vardef_expr(std::string var, std::string type) : var_(var), type_(type) {}
+
+    void accept(visitor& v) override;
+
+    vardef_expr* is_vardef() override {return this;}
+};
+
+struct varref_expr : expression {
+    std::string var_;
+
     varref_expr(std::string var) : var_(var) {}
-    varref_expr(std::string var, std::string type) : var_(var), type_(type) {}
 
     void accept(visitor& v) override;
 
@@ -116,7 +127,7 @@ struct let_expr : expression {
     expr_ptr body_;
 
     let_expr(typed_var var, expr_ptr val, expr_ptr body) :
-    var_(std::make_shared<varref_expr>(var.var, var.type)), val_(val), body_(body) {}
+    var_(std::make_shared<vardef_expr>(var.var, var.type)), val_(val), body_(body) {}
 
     void accept(visitor& v) override;
 

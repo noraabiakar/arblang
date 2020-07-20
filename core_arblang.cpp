@@ -18,6 +18,10 @@ void float_expr::accept(visitor& v) {
     v.visit(*this);
 }
 
+void vardef_expr::accept(visitor& v) {
+    v.visit(*this);
+}
+
 void varref_expr::accept(visitor& v) {
     v.visit(*this);
 }
