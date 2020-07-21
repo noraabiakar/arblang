@@ -153,7 +153,7 @@ struct create_ir : visitor {
         auto body = statement_;
 
         statement_ = std::make_shared<ir::func_rep>(e.name_, ret, args, body);
-        def_types_.insert({e.name_, statement_->is_func()->type_});
+        def_types_.insert({e.name_, statement_->type()});
     }
 
     virtual void visit(const struct_expr& e) override {
@@ -164,7 +164,7 @@ struct create_ir : visitor {
         }
 
         statement_ = std::make_shared<ir::struct_rep>(e.name_, fields);
-        def_types_.insert({e.name_, statement_->is_struct()->type_});
+        def_types_.insert({e.name_, statement_->type()});
     }
 
     virtual void visit(const float_expr& e) override {
@@ -185,7 +185,9 @@ struct create_ir : visitor {
         if (it == scope_vars_.end()) {
             throw std::runtime_error("Variable reference \"" + e.var_ + "\" is undefined");
         }
-        statement_ = std::make_shared<ir::varref_rep>(e.var_, it->second);
+        auto def = it->second;
+
+        statement_ = std::make_shared<ir::varref_rep>(def, def->type());
     }
 
     virtual void visit(const let_expr& e) override {
@@ -198,7 +200,7 @@ struct create_ir : visitor {
         e.body_->accept(*this);
         auto body = statement_;
 
-        statement_ = std::make_shared<ir::let_rep>(var, val, body);
+        statement_ = std::make_shared<ir::let_rep>(var, val, body, body->type());
     }
 
     virtual void visit(const binary_expr& e) override {
@@ -208,7 +210,17 @@ struct create_ir : visitor {
         e.rhs_->accept(*this);
         auto rhs = statement_;
 
-        statement_ = std::make_shared<ir::binary_rep>(lhs, rhs, e.op_);
+        auto t =   lhs->type();
+        auto r =   rhs->type();
+
+        if (lhs->type()->name() != rhs->type()->name()) {
+            throw std::runtime_error("Cannot perform binary operation on incompatible types");
+        }
+        if (!lhs->type()->is_float()) {
+            throw std::runtime_error("Cannot perform binary operation on non-float types");
+        }
+
+        statement_ = std::make_shared<ir::binary_rep>(lhs, rhs, e.op_, lhs->type());
     }
 
     virtual void visit(const access_expr& e) override {
@@ -218,19 +230,19 @@ struct create_ir : visitor {
         }
 
         auto def = it->second;
-        auto ref = std::make_shared<ir::varref_rep>(e.object_, def);
+        auto ref = std::make_shared<ir::varref_rep>(def, def->type());
 
-        if (auto obj = def->is_vardef()->type_->is_struct()) {
+        if (auto obj = def->type()->is_struct()) {
             unsigned i = 0;
             for (; i < obj->fields_.size(); ++i) {
                 if (obj->fields_[i].name == e.field_) {
-                    break;
+                    statement_ = std::make_shared<ir::access_rep>(ref, i, obj->fields_[i].type);
+                    return;
                 }
             }
-            statement_ = std::make_shared<ir::access_rep>(ref, i);
-        } else {
-            throw std::runtime_error("Variable reference \"" + e.object_ + "\" doesn't have a struct type; cannot access member \"" + e.field_+ "\"");
+            throw std::runtime_error("Object \"" + e.object_ + "\" doesnot contain fields  \"" + e.field_+ "\"");
         }
+        throw std::runtime_error("Variable reference \"" + e.object_ + "\" doesn't have a struct type; cannot access member \"" + e.field_+ "\"");
     }
 
     virtual void visit(const create_expr& e) override {
@@ -240,13 +252,21 @@ struct create_ir : visitor {
         }
         auto strct = it->second;
 
-        std::vector<ir::ir_ptr> fields;
-        for (auto& a: e.fields_) {
-            a->accept(*this);
-            fields.push_back(statement_);
+        if (!strct->is_struct()) {
+            throw std::runtime_error("Cannot create object of non-struct type");
         }
-        if (fields.size() != strct->is_struct()->fields_.size()) {
-            throw std::runtime_error("Cannot create object of type \"" + e.struct_ + "\"' too many/too few arguments provided");
+
+        std::vector<ir::ir_ptr> fields;
+        const auto& struct_fields = strct->is_struct()->fields_;
+
+        for (unsigned i = 0; i < e.fields_.size(); ++i) {
+            const auto& f = e.fields_[i];
+            f->accept(*this);
+
+            if (statement_->type() != struct_fields[i].type) {
+                throw std::runtime_error("Cannot create object: incorrect type for field " + std::to_string(i));
+            }
+            fields.push_back(statement_);
         }
         statement_ = std::make_shared<ir::create_rep>(fields, strct);
     }
@@ -258,16 +278,22 @@ struct create_ir : visitor {
         }
         auto func = it->second;
 
+        if (!func->is_func()) {
+            throw std::runtime_error("Cannot apply a non-function type");
+        }
+
         std::vector<ir::ir_ptr> args;
-        for (auto& a: e.args_) {
-            a->accept(*this);
+        const auto& func_args = func->is_func()->args_;
+
+        for (unsigned i = 0; i < e.args_.size(); ++i) {
+            const auto& f = e.args_[i];
+            f->accept(*this);
+
+            if (statement_->type() != func_args[i].type) {
+                throw std::runtime_error("Cannot apply function: incorrect type for argument " + std::to_string(i));
+            }
             args.push_back(statement_);
         }
-
-        if (args.size() != func->is_func()->args_.size()) {
-            throw std::runtime_error("Cannot apply function \"" + e.func_ + "\"' too many/too few arguments provided");
-        }
-
         statement_ = std::make_shared<ir::apply_rep>(args, func);
     }
 
@@ -345,7 +371,7 @@ struct print : visitor {
     }
 
     virtual void visit(const varref_rep& e) override {
-        out_ << e.name_;
+        out_ << e.type()->name();
     }
 
     virtual void visit(const let_rep& e) override {

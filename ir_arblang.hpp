@@ -29,8 +29,6 @@ struct nested_rep;
 struct halt_rep;
 
 struct ir_expression {
-    virtual void accept(visitor&) = 0;
-
     virtual func_rep*    is_func()     {return nullptr;}
     virtual struct_rep*  is_struct()   {return nullptr;}
     virtual float_rep*   is_float()    {return nullptr;}
@@ -43,6 +41,16 @@ struct ir_expression {
     virtual apply_rep*   is_apply()    {return nullptr;}
     virtual nested_rep*  is_nested()   {return nullptr;}
     virtual halt_rep*    is_halt()     {return nullptr;}
+
+    virtual void accept(visitor&) = 0;
+
+    ir_expression() {};
+    ir_expression(type_ptr type): type_(type) {};
+
+    type_ptr type_;
+    virtual type_ptr type() const {
+        return type_;
+    }
 };
 
 using ir_ptr = std::shared_ptr<ir_expression>;
@@ -53,7 +61,6 @@ struct func_rep : ir_expression {
     std::vector<ir_ptr> args_;
     ir_ptr              body_;
     ir_ptr              scope_;     // The `in` part of let_s ... in ...
-    type_ptr            type_;
 
     func_rep(std::string name, type_ptr ret, std::vector<ir_ptr> args, ir_ptr body);
 
@@ -70,7 +77,6 @@ struct struct_rep : ir_expression {
     std::string         name_;
     std::vector<ir_ptr> fields_;
     ir_ptr              scope_;     // The `in` part of let_s ... in ...
-    type_ptr            type_;
 
     struct_rep(std::string name, std::vector<ir_ptr> fields);
 
@@ -86,9 +92,8 @@ struct struct_rep : ir_expression {
 
 struct float_rep : ir_expression {
     double val_;
-    type_ptr type_;
 
-    float_rep(double val) : val_(val), type_(std::make_shared<float_type>()) {}
+    float_rep(double val) : ir_expression(std::make_shared<float_type>()), val_(val) {}
 
     void accept(visitor& v) override;
 
@@ -97,9 +102,8 @@ struct float_rep : ir_expression {
 
 struct vardef_rep : ir_expression {
     std::string name_;
-    type_ptr type_;
 
-    vardef_rep(std::string name, type_ptr t) : name_(name), type_(t) {}
+    vardef_rep(std::string name, type_ptr type) : ir_expression(type), name_(name) {}
 
     void accept(visitor& v) override;
 
@@ -107,10 +111,9 @@ struct vardef_rep : ir_expression {
 };
 
 struct varref_rep : ir_expression {
-    std::string name_;
     ir_ptr def_; // pointer to verdef
 
-    varref_rep(std::string name, ir_ptr def) : name_(name), def_(def) {}
+    varref_rep(ir_ptr def, type_ptr type) : ir_expression(type), def_(def) {}
 
     void accept(visitor& v) override;
 
@@ -122,7 +125,7 @@ struct let_rep : ir_expression {
     ir_ptr val_;
     ir_ptr scope_;
 
-    let_rep(ir_ptr var, ir_ptr val, ir_ptr scope) : var_(var), val_(val), scope_(scope) {}
+    let_rep(ir_ptr var, ir_ptr val, ir_ptr scope, type_ptr type) : ir_expression(type), var_(var), val_(val), scope_(scope) {}
 
     void accept(visitor& v) override;
 
@@ -133,8 +136,7 @@ struct binary_rep : ir_expression {
     ir_ptr lhs_;
     ir_ptr rhs_;
     operation op_;
-
-    binary_rep(ir_ptr lhs, ir_ptr rhs, operation op) : lhs_(lhs), rhs_(rhs), op_(op) {}
+    binary_rep(ir_ptr lhs, ir_ptr rhs, operation op, type_ptr type) : ir_expression(type), lhs_(lhs), rhs_(rhs), op_(op) {}
 
     void accept(visitor& v) override;
 
@@ -145,7 +147,7 @@ struct access_rep : ir_expression {
     ir_ptr var_; //varref
     unsigned index_;
 
-    access_rep(ir_ptr var, unsigned index) : var_(var), index_(index) {}
+    access_rep(ir_ptr var, unsigned index, type_ptr type) : ir_expression(type), var_(var), index_(index) {}
 
     void accept(visitor& v) override;
 
@@ -154,9 +156,8 @@ struct access_rep : ir_expression {
 
 struct create_rep : ir_expression {
     std::vector<ir_ptr> fields_;
-    type_ptr type_;
 
-    create_rep(std::vector<ir_ptr> fields, type_ptr type) : fields_(fields), type_(type) {}
+    create_rep(std::vector<ir_ptr> fields, type_ptr type) : ir_expression(type), fields_(fields) {}
 
     void accept(visitor& v) override;
 
@@ -165,9 +166,8 @@ struct create_rep : ir_expression {
 
 struct apply_rep : ir_expression {
     std::vector<ir_ptr> args_;
-    type_ptr type_;
 
-    apply_rep(std::vector<ir_ptr> args, type_ptr type) : args_(args), type_(type) {}
+    apply_rep(std::vector<ir_ptr> args, type_ptr type) : ir_expression(type), args_(args) {}
 
     void accept(visitor& v) override;
 
