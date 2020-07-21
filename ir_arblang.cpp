@@ -3,7 +3,7 @@
 
 namespace ir {
 
-func_rep::func_rep(std::string name, type_ptr ret, std::vector<ir_ptr> args, ir_ptr body) : name_(name), body_(body) {
+func_rep::func_rep(std::string name, type_ptr ret, std::vector<ir_ptr> args, ir_ptr body) : name_(name), args_(args), body_(body) {
     std::vector<field> typed_args;
     for (auto& a: args) {
         if (auto vr = a->is_vardef()) {
@@ -15,7 +15,7 @@ func_rep::func_rep(std::string name, type_ptr ret, std::vector<ir_ptr> args, ir_
     type_ = std::make_shared<func_type>(name, ret, typed_args);
 }
 
-struct_rep::struct_rep(std::string name, std::vector<ir_ptr> fields) : name_(name) {
+struct_rep::struct_rep(std::string name, std::vector<ir_ptr> fields) : name_(name), fields_(fields) {
     std::vector<field> typed_fields;
     for (auto& f: fields) {
         if (auto vr = f->is_vardef()) {

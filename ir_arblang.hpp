@@ -145,7 +145,7 @@ struct access_rep : ir_expression {
     ir_ptr var_; //varref
     unsigned index_;
 
-    access_rep(ir_ptr var, unsigned index) : var_(var_), index_(index) {}
+    access_rep(ir_ptr var, unsigned index) : var_(var), index_(index) {}
 
     void accept(visitor& v) override;
 
