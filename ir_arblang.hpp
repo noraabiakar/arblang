@@ -62,6 +62,9 @@ struct func_rep : ir_expression {
     ir_ptr              body_;
     ir_ptr              scope_;     // The `in` part of let_s ... in ...
 
+    func_rep(std::string name, std::vector<ir_ptr> args, ir_ptr body, type_ptr type)
+        : ir_expression(type), name_(name), args_(args), body_(body) {};
+
     func_rep(std::string name, type_ptr ret, std::vector<ir_ptr> args, ir_ptr body);
 
     void set_scope(const ir_ptr& scope) {
@@ -124,6 +127,8 @@ struct let_rep : ir_expression {
     ir_ptr var_;
     ir_ptr val_;
     ir_ptr scope_;
+
+    let_rep(ir_ptr var, ir_ptr val) : var_(var), val_(val) {}
 
     let_rep(ir_ptr var, ir_ptr val, ir_ptr scope, type_ptr type) : ir_expression(type), var_(var), val_(val), scope_(scope) {}
 

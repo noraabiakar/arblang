@@ -324,6 +324,151 @@ struct visitor {
     virtual void visit(const halt_rep& e)   {visit((ir_expression&) e);};
 };
 
+struct canonical : visitor {
+    ir_ptr statement_;
+    unsigned idx_ = 0;
+
+    std::string unique_id() {
+        return "_ll" + std::to_string(idx_++);
+    }
+
+    canonical() {}
+
+    virtual void visit(const func_rep& e) override {
+        e.body_->accept(*this);
+        auto new_body = statement_;
+
+        statement_ = std::make_shared<func_rep>(e.name_, e.args_, new_body, e.type());
+    }
+
+    virtual void visit(const struct_rep& e) override {
+        statement_ = std::make_shared<struct_rep>(e);
+    }
+
+    virtual void visit(const float_rep& e) override {
+        statement_ = std::make_shared<float_rep>(e);
+    }
+
+    virtual void visit(const vardef_rep& e) override {
+        statement_ = std::make_shared<vardef_rep>(e);
+    }
+
+    virtual void visit(const varref_rep& e) override {
+        statement_ = std::make_shared<varref_rep>(e);
+    }
+
+    virtual void visit(const let_rep& e) override {
+        e.val_->accept(*this);
+        auto new_val = statement_;
+
+        e.scope_->accept(*this);
+        auto new_scope = statement_;
+
+        statement_ = std::make_shared<let_rep>(e.var_, new_val, new_scope);
+    }
+
+    virtual void visit(const binary_rep& e) override {
+        if ((e.lhs_->is_varref() || e.lhs_->is_float()) &&
+            (e.rhs_->is_varref() || e.rhs_->is_float())) {
+
+            auto var = unique_id();
+            auto vardef = std::make_shared<vardef_rep>(var, e.lhs_->type());
+            auto varref = std::make_shared<varref_rep>(vardef, vardef->type());
+            statement_ = std::make_shared<let_rep>(vardef, std::make_shared<binary_rep>(e), e.type());
+            return;
+        }
+        if (!(e.lhs_->is_varref() || e.lhs_->is_float()) &&
+             (e.rhs_->is_varref() || e.rhs_->is_float())) {
+
+            e.lhs_->accept(*this);
+            auto lhs_stmt = statement_;
+
+            if (!lhs_stmt->is_let()) {
+                throw std::runtime_error("LHS of bin expression has wrong type");
+            }
+
+            auto lhs_var = lhs_stmt->is_let()->var_;
+            auto lhs_val = lhs_stmt->is_let()->val_;
+
+            auto var = unique_id();
+            auto vardef = std::make_shared<vardef_rep>(var, lhs_var->type());
+            auto varref = std::make_shared<varref_rep>(vardef, vardef->type());
+            auto bin    = std::make_shared<binary_rep>(lhs_var, e.rhs_, e.op_, e.type());
+            auto let    = std::make_shared<let_rep>(vardef, bin);
+
+            statement_ = std::make_shared<let_rep>(lhs_var, lhs_val, let, let->type());
+            return;
+        }
+        if ((e.lhs_->is_varref() || e.lhs_->is_float()) &&
+           !(e.rhs_->is_varref() || e.rhs_->is_float())) {
+
+            e.rhs_->accept(*this);
+            auto rhs_stmt = statement_;
+
+            if (!rhs_stmt->is_let()) {
+                throw std::runtime_error("LHS of bin expression has wrong type");
+            }
+
+            auto rhs_var = rhs_stmt->is_let()->var_;
+            auto rhs_val = rhs_stmt->is_let()->val_;
+
+            auto var = unique_id();
+            auto vardef = std::make_shared<vardef_rep>(var, rhs_var->type());
+            auto varref = std::make_shared<varref_rep>(vardef, vardef->type());
+            auto bin    = std::make_shared<binary_rep>(e.lhs_, rhs_var, e.op_, e.type());
+            auto let    = std::make_shared<let_rep>(vardef, bin, e.type());
+
+            statement_ = std::make_shared<let_rep>(rhs_var, rhs_val, let, let->type());
+            return;
+        }
+        e.lhs_->accept(*this);
+        auto lhs_stmt = statement_;
+
+        e.rhs_->accept(*this);
+        auto rhs_stmt = statement_;
+
+        if (!lhs_stmt->is_let() || !rhs_stmt->is_let()) {
+            throw std::runtime_error("LHS/RHS of bin expression has wrong type");
+        }
+
+        auto rhs_var = rhs_stmt->is_let()->var_;
+        auto lhs_var = lhs_stmt->is_let()->var_;
+
+        auto rhs_val = rhs_stmt->is_let()->val_;
+        auto lhs_val = lhs_stmt->is_let()->val_;
+
+        auto var = unique_id();
+        auto vardef = std::make_shared<vardef_rep>(var, lhs_var->type());
+        auto varref = std::make_shared<varref_rep>(vardef, vardef->type());
+        auto bin    = std::make_shared<binary_rep>(lhs_var, rhs_var, e.op_, e.type());
+        auto let    = std::make_shared<let_rep>(vardef, bin);
+
+        auto lhs_let = std::make_shared<let_rep>(lhs_var, lhs_val, let, let->type());
+        statement_   = std::make_shared<let_rep>(rhs_var, rhs_val, lhs_let, lhs_let->type());
+        return;
+    }
+
+    virtual void visit(const access_rep& e) override {
+        statement_ = std::make_shared<access_rep>(e);
+    }
+
+    virtual void visit(const create_rep& e) override {
+        std::vector<ir_ptr> new_fields;
+
+        for (auto& f: e.fields_) {
+            f->accept(*this);
+            auto stmt = statement_;
+            if ((stmt->is_varref() || stmt->is_float()) {
+                new_fields.push_back(stmt)
+            }
+
+        }
+    }
+
+    virtual void visit(const ir_expression& e) override {}
+
+};
+
 struct print : visitor {
     std::ostream& out_;
 
@@ -436,4 +581,4 @@ struct print : visitor {
     }
 
 };
-}
+} //namespace ir
