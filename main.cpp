@@ -5,10 +5,27 @@ std::vector<ir::ir_ptr> create_arblang_ir(std::shared_ptr<core::block_expr> e) {
     auto creator = core::create_ir();
 
     for (auto& s: e->statements_) {
+//        if (!s->is_struct() && !s->is_func()) {
+//            throw std::runtime_error("Can only transform struct/func definitions");
+//        }
         s->accept(creator);
         statements.push_back(creator.statement_);
         creator.reset();
     }
+
+    auto canon = ir::canonical();
+
+    for (auto& s: statements) {
+        if (!s->is_func()) { continue; }
+        s->is_func()->body_->accept(canon);
+        auto new_lets = canon.new_lets;
+
+        auto ir_printer = ir::print(std::cout);
+        for (auto& l: new_lets) {
+            l->accept(ir_printer);
+        }
+    }
+
     return statements;
 };
 
@@ -31,23 +48,25 @@ int main() {
     auto weighted_i = std::make_shared<core::binary_expr>(i, std::make_shared<core::varref_expr>("w"), core::operation::mul);
     auto g = std::make_shared<core::binary_expr>(g0, m, operation::mul);
 
+    auto create_curr = std::make_shared<core::create_expr>("current-contrib", std::vector<core::expr_ptr>{weighted_i, g});
+
+    auto let_weighted = std::make_shared<core::let_expr>(core::typed_var{"w", "float"}, std::make_shared<core::float_expr>(0.1), create_curr);
+
     auto current = std::make_shared<core::func_expr>("current-contrib",
                                                      "current",
                                                      std::vector<core::typed_var>{{"p", "param"}, {"s", "state"}, {"c", "cell"}},
-                                                     std::make_shared<core::create_expr>("current-contrib", std::vector<core::expr_ptr>{weighted_i, g}));
+                                                     let_weighted);
 
-    auto weighted_current  = std::make_shared<core::let_expr>(core::typed_var{"w", "float"}, std::make_shared<core::float_expr>(0.1), current);
-
-    auto block = std::make_shared<core::block_expr>(std::vector<core::expr_ptr>{current_contrib, ion_state, cell, state, param, weighted_current});
+    auto block = std::make_shared<core::block_expr>(std::vector<core::expr_ptr>{current_contrib, ion_state, cell, state, param, current});
 
     block->accept(core_printer);
     std::cout << "\n------------------------------------------------------\n";
 
     auto ir_printer = ir::print(std::cout);
     auto statements = create_arblang_ir(block);
-    for (auto s: statements) {
-        s->accept(ir_printer);
-    }
+//    for (auto s: statements) {
+//        s->accept(ir_printer);
+//    }
 
     return 0;
 }
