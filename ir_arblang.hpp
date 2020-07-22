@@ -140,6 +140,10 @@ struct let_rep : ir_expression {
         type_ = type;
     }
 
+    void replace_val(ir_ptr val) {
+        val_ = val;
+    }
+
     void accept(visitor& v) override;
 
     let_rep* is_let() override {return this;}
@@ -150,6 +154,14 @@ struct binary_rep : ir_expression {
     ir_ptr rhs_;
     operation op_;
     binary_rep(ir_ptr lhs, ir_ptr rhs, operation op, type_ptr type) : ir_expression(type), lhs_(lhs), rhs_(rhs), op_(op) {}
+
+    void replace_lhs(ir_ptr lhs) {
+        lhs_ = lhs;
+    }
+
+    void replace_rhs(ir_ptr rhs) {
+        rhs_ = rhs;
+    }
 
     void accept(visitor& v) override;
 
@@ -172,6 +184,10 @@ struct create_rep : ir_expression {
 
     create_rep(std::vector<ir_ptr> fields, type_ptr type) : ir_expression(type), fields_(fields) {}
 
+    void replace_field(unsigned i, ir_ptr field) {
+        fields_[i] = field;
+    }
+
     void accept(visitor& v) override;
 
    create_rep* is_create() override {return this;}
@@ -181,6 +197,10 @@ struct apply_rep : ir_expression {
     std::vector<ir_ptr> args_;
 
     apply_rep(std::vector<ir_ptr> args, type_ptr type) : ir_expression(type), args_(args) {}
+
+    void replace_arg(unsigned i, ir_ptr arg) {
+        args_[i] = arg;
+    }
 
     void accept(visitor& v) override;
 

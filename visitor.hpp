@@ -309,18 +309,182 @@ struct create_ir : visitor {
 namespace ir{
 
 struct visitor {
-    virtual void visit(const ir_expression&)  = 0;
-    virtual void visit(const func_rep& e)   {visit((ir_expression&) e);};
-    virtual void visit(const struct_rep& e) {visit((ir_expression&) e);};
-    virtual void visit(const float_rep& e)  {visit((ir_expression&) e);};
-    virtual void visit(const vardef_rep& e) {visit((ir_expression&) e);};
-    virtual void visit(const varref_rep& e) {visit((ir_expression&) e);};
-    virtual void visit(const let_rep& e)    {visit((ir_expression&) e);};
-    virtual void visit(const binary_rep& e) {visit((ir_expression&) e);};
-    virtual void visit(const access_rep& e) {visit((ir_expression&) e);};
-    virtual void visit(const create_rep& e) {visit((ir_expression&) e);};
-    virtual void visit(const apply_rep& e)  {visit((ir_expression&) e);};
+    virtual void visit(ir_expression&)  = 0;
+    virtual void visit(func_rep& e)   {visit((ir_expression&) e);};
+    virtual void visit(struct_rep& e) {visit((ir_expression&) e);};
+    virtual void visit(float_rep& e)  {visit((ir_expression&) e);};
+    virtual void visit(vardef_rep& e) {visit((ir_expression&) e);};
+    virtual void visit(varref_rep& e) {visit((ir_expression&) e);};
+    virtual void visit(let_rep& e)    {visit((ir_expression&) e);};
+    virtual void visit(binary_rep& e) {visit((ir_expression&) e);};
+    virtual void visit(access_rep& e) {visit((ir_expression&) e);};
+    virtual void visit(create_rep& e) {visit((ir_expression&) e);};
+    virtual void visit(apply_rep& e)  {visit((ir_expression&) e);};
 };
+
+struct print : visitor {
+        std::ostream& out_;
+        unsigned indent_ = 0;
+
+        print(std::ostream& out) : out_(out) {}
+
+        virtual void visit(func_rep& e) override {
+            out_ << "(let_f (";
+
+            if (auto t = e.type_->is_func()->ret_->is_struct()) {
+                out_ << t->name_ << " ";
+            } else {
+                out_ << "float ";
+            }
+
+            out_ << e.name_ << " (";
+
+            for (auto& a: e.args_) {
+                a->accept(*this);
+                out_ << " ";
+            }
+            out_ << ")";
+
+            indent_+=2;
+            out_ << "\n" << move(indent_);
+
+            e.body_->accept(*this);
+
+            indent_-=2;
+            out_ << move(indent_) << ")";
+
+            if(e.scope_) {
+                indent_+=2;
+                out_ << "\n" << move(indent_) << "in  ";
+
+                e.scope_->accept(*this);
+
+                indent_-=2;
+                out_ << move(indent_) << ")\n";
+            } else {
+                out_ << ")\n";
+            }
+
+        }
+
+        virtual void visit(struct_rep& e) override {
+            out_ << "(let_s (" << e.name_ << " (";
+
+            for (auto& f: e.fields_) {
+                f->accept(*this);
+                out_ << " ";
+            }
+            out_ << "))";
+
+            if(e.scope_) {
+                indent_+=2;
+                out_ << "\n" << move(indent_) << "in  ";
+
+                e.scope_->accept(*this);
+
+                indent_-=2;
+                out_ << move(indent_) << ")\n";
+            } else {
+                out_ << ")\n";
+            }
+        }
+
+        virtual void visit(float_rep& e) override {
+            out_ << e.val_;
+        }
+
+        virtual void visit(vardef_rep& e) override {
+            out_ << e.name_ << ":";
+            if (auto t = e.type_->is_struct()) {
+                out_ << t->name_;
+            } else if (auto t = e.type_->is_float()){
+                out_ << "float";
+            }
+        }
+
+        virtual void visit(varref_rep& e) override {
+            out_ << e.def_->is_vardef()->name_;
+        }
+
+        virtual void visit(let_rep& e) override {
+            out_ << "(let_v (";
+            e.var_->accept(*this);
+            out_ << " (";
+            e.val_->accept(*this);
+            out_ << "))";
+
+            if(e.scope_) {
+                indent_+=2;
+                out_ << "\n" << move(indent_) << "in  ";
+
+                e.scope_->accept(*this);
+
+                if (e.scope_->is_varref()) {
+                    out_ << "\n";
+                }
+
+                indent_-=2;
+                out_ << move(indent_) << ")\n";
+            } else {
+                out_ << ")\n";
+            }
+        }
+
+        virtual void visit(binary_rep& e) override {
+            out_ << "(";
+
+            switch (e.op_) {
+                case operation::add: {
+                    out_ << " + ";
+                    break;
+                }
+                case operation::sub: {
+                    out_ << " - ";
+                    break;
+                }
+                case operation::mul: {
+                    out_ << " * ";
+                    break;
+                }
+                case operation::div: {
+                    out_ << " / ";
+                    break;
+                }
+            }
+            e.lhs_->accept(*this);
+            out_ << " ";
+            e.rhs_->accept(*this);
+            out_ << ")";
+        }
+
+        virtual void visit(access_rep& e) override {
+            e.var_->accept(*this);
+            out_ << ".at(" << e.index_ << ")";
+        }
+
+        virtual void visit(create_rep& e) override {
+            out_ << "(create ";
+            if (auto t = e.type_->is_struct()) {
+                out_ << t->name_ << "(";
+            } else {
+                out_ << "float(";
+            };
+            for (auto& a: e.fields_) {
+                a->accept(*this);
+                out_ << " ";
+            }
+            out_ << "))";
+        }
+
+        virtual void visit(ir_expression& e) override {
+        }
+
+    private:
+        std::string move(int x) {
+            return std::string(x, ' ');
+        }
+
+    };
 
 struct canonical : visitor {
     std::vector<ir_ptr> new_lets;
@@ -332,11 +496,11 @@ struct canonical : visitor {
 
     canonical() {}
 
-    virtual void visit(const let_rep& e) override {
+    virtual void visit(let_rep& e) override {
         e.scope_->accept(*this);
     }
 
-    virtual void visit(const binary_rep& e) override {
+    virtual void visit(binary_rep& e) override {
         ir_ptr lhs, rhs;
         operation op = e.op_;
 
@@ -360,13 +524,13 @@ struct canonical : visitor {
         new_lets.push_back(std::make_shared<let_rep>(vardef, std::make_shared<binary_rep>(lhs, rhs, op, lhs->type())));
     }
 
-    virtual void visit(const access_rep& e) override {
+    virtual void visit(access_rep& e) override {
         auto vardef = std::make_shared<vardef_rep>(unique_id(), e.type());
         auto varref = std::make_shared<varref_rep>(vardef, vardef->type());
         new_lets.push_back(std::make_shared<let_rep>(vardef, std::make_shared<access_rep>(e)));
     }
 
-    virtual void visit(const create_rep& e) override {
+    virtual void visit(create_rep& e) override {
         std::vector<ir_ptr> fields;
         for (auto& f: e.fields_) {
             if (f->is_float() || f->is_varref()) {
@@ -382,7 +546,7 @@ struct canonical : visitor {
         new_lets.push_back(std::make_shared<let_rep>(vardef, std::make_shared<create_rep>(fields, e.type())));
     }
 
-    virtual void visit(const apply_rep& e) override {
+    virtual void visit(apply_rep& e) override {
         std::vector<ir_ptr> args;
         for (auto& a: e.args_) {
             if (a->is_float() || a->is_varref()) {
@@ -398,174 +562,12 @@ struct canonical : visitor {
         new_lets.push_back(std::make_shared<let_rep>(vardef, std::make_shared<apply_rep>(args, e.type())));
     }
 
-    virtual void visit(const ir_expression& e) override {}
-
-};
-
-struct print : visitor {
-    std::ostream& out_;
-    unsigned indent_ = 0;
-
-    print(std::ostream& out) : out_(out) {}
-
-    virtual void visit(const func_rep& e) override {
-        out_ << "(let_f (";
-
-        if (auto t = e.type_->is_func()->ret_->is_struct()) {
-            out_ << t->name_ << " ";
-        } else {
-            out_ << "float ";
-        }
-
-        out_ << e.name_ << " (";
-
-        for (auto& a: e.args_) {
-            a->accept(*this);
-            out_ << " ";
-        }
-        out_ << ")";
-
-        indent_+=2;
-        out_ << "\n" << move(indent_);
-
-        e.body_->accept(*this);
-
-        indent_-=2;
-        out_ << move(indent_) << ")";
-
-        if(e.scope_) {
-            indent_+=2;
-            out_ << "\n" << move(indent_) << "in  ";
-
-            e.scope_->accept(*this);
-
-            indent_-=2;
-            out_ << move(indent_) << ")\n";
-        } else {
-            out_ << ")\n";
-        }
-
-    }
-
-    virtual void visit(const struct_rep& e) override {
-        out_ << "(let_s (" << e.name_ << " (";
-
-        for (auto& f: e.fields_) {
-            f->accept(*this);
-            out_ << " ";
-        }
-        out_ << "))";
-
-        if(e.scope_) {
-            indent_+=2;
-            out_ << "\n" << move(indent_) << "in  ";
-
-            e.scope_->accept(*this);
-
-            indent_-=2;
-            out_ << move(indent_) << ")\n";
-        } else {
-            out_ << ")\n";
-        }
-    }
-
-    virtual void visit(const float_rep& e) override {
-        out_ << e.val_;
-    }
-
-    virtual void visit(const vardef_rep& e) override {
-        out_ << e.name_ << ":";
-        if (auto t = e.type_->is_struct()) {
-            out_ << t->name_;
-        } else if (auto t = e.type_->is_float()){
-            out_ << "float";
-        }
-    }
-
-    virtual void visit(const varref_rep& e) override {
-        out_ << e.def_->is_vardef()->name_;
-    }
-
-    virtual void visit(const let_rep& e) override {
-        out_ << "(let_v (";
-        e.var_->accept(*this);
-        out_ << " (";
-        e.val_->accept(*this);
-        out_ << "))";
-
-        if(e.scope_) {
-            indent_+=2;
-            out_ << "\n" << move(indent_) << "in  ";
-
-            e.scope_->accept(*this);
-
-            indent_-=2;
-            out_ << move(indent_) << ")\n";
-        } else {
-            out_ << ")\n";
-        }
-    }
-
-    virtual void visit(const binary_rep& e) override {
-        out_ << "(";
-
-        switch (e.op_) {
-            case operation::add: {
-                out_ << " + ";
-                break;
-            }
-            case operation::sub: {
-                out_ << " - ";
-                break;
-            }
-            case operation::mul: {
-                out_ << " * ";
-                break;
-            }
-            case operation::div: {
-                out_ << " / ";
-                break;
-            }
-        }
-        e.lhs_->accept(*this);
-        out_ << " ";
-        e.rhs_->accept(*this);
-        out_ << ")";
-    }
-
-    virtual void visit(const access_rep& e) override {
-        e.var_->accept(*this);
-        out_ << ".at(" << e.index_ << ")";
-    }
-
-    virtual void visit(const create_rep& e) override {
-        out_ << "(create ";
-        if (auto t = e.type_->is_struct()) {
-            out_ << t->name_ << "(";
-        } else {
-            out_ << "float(";
-        };
-        for (auto& a: e.fields_) {
-            a->accept(*this);
-            out_ << " ";
-        }
-        out_ << "))";
-    }
-
-    virtual void visit(const ir_expression& e) override {
-    }
-
-private:
-    std::string move(int x) {
-        return std::string(x, ' ');
-    }
+    virtual void visit(ir_expression& e) override {}
 
 };
 
 struct validate : visitor {
-    validate() {};
-
-    virtual void visit(const func_rep& e) override {
+    virtual void visit(func_rep& e) override {
         if (!e.body_) {
             throw std::runtime_error("Function " + e.name_ + " has no body");
         }
@@ -612,7 +614,7 @@ struct validate : visitor {
         }
     }
 
-    virtual void visit(const struct_rep& e) override {
+    virtual void visit(struct_rep& e) override {
         for(auto a: e.fields_) {
             if (!a->is_vardef()) {
                 throw std::runtime_error("Struct " + e.name_ + " has an invalid field");
@@ -652,7 +654,7 @@ struct validate : visitor {
         }
     }
 
-    virtual void visit(const float_rep& e) override {
+    virtual void visit(float_rep& e) override {
         if (!e.type()) {
             throw std::runtime_error("Float number has no type");
         }
@@ -661,7 +663,7 @@ struct validate : visitor {
         }
     }
 
-    virtual void visit(const vardef_rep& e) override {
+    virtual void visit(vardef_rep& e) override {
         if (e.name_.empty()) {
             throw std::runtime_error("Variable defintion has no name");
         }
@@ -673,7 +675,7 @@ struct validate : visitor {
         }
     }
 
-    virtual void visit(const varref_rep& e) override {
+    virtual void visit(varref_rep& e) override {
         if (!e.type()) {
             throw std::runtime_error("Variable references has no type");
         }
@@ -687,7 +689,7 @@ struct validate : visitor {
         }
     }
 
-    virtual void visit(const let_rep& e) override {
+    virtual void visit(let_rep& e) override {
         if (!e.type()) {
             throw std::runtime_error("Let expression has no type");
         }
@@ -705,7 +707,7 @@ struct validate : visitor {
         }
     }
 
-    virtual void visit(const binary_rep& e) override {
+    virtual void visit(binary_rep& e) override {
         if (!e.type()) {
             throw std::runtime_error("Binary expression has no type");
         }
@@ -726,7 +728,7 @@ struct validate : visitor {
         }
     }
 
-    virtual void visit(const access_rep& e) override {
+    virtual void visit(access_rep& e) override {
         if (!e.type()) {
             throw std::runtime_error("Access expression has no type");
         }
@@ -743,7 +745,7 @@ struct validate : visitor {
         }
     }
 
-    virtual void visit(const create_rep& e) override {
+    virtual void visit(create_rep& e) override {
         if (!e.type()) {
             throw std::runtime_error("Create expression has no type");
         }
@@ -769,7 +771,7 @@ struct validate : visitor {
         }
     }
 
-    virtual void visit(const apply_rep& e) override {
+    virtual void visit(apply_rep& e) override {
         if (!e.type()) {
             throw std::runtime_error("Apply expression has no type");
         }
@@ -794,6 +796,131 @@ struct validate : visitor {
             }
         }
     }
-    virtual  void visit(const ir_expression& e) override {}
+    virtual  void visit(ir_expression& e) override {}
 };
-} //namespace ir
+
+struct constant_prop : visitor {
+    bool prop_ = false;
+    void reset() {
+        prop_ = false;
+    }
+    bool propagation_perfromed() {
+        return prop_;
+    }
+    std::unordered_map<std::string, float> constants;
+
+    void visit(func_rep& e) override {
+        e.body_->accept(*this);
+        if(e.scope_) {
+            e.scope_->accept(*this);
+        }
+    }
+
+    void visit(struct_rep& e) override {
+        if(e.scope_) {
+            e.scope_->accept(*this);
+        }
+    }
+
+    void visit(let_rep& e) override {
+        if (e.val_->is_float()) {
+            constants.insert({e.var_->is_vardef()->name_, e.val_->is_float()->val_});
+        }
+        if (auto ref = e.val_->is_varref()) {
+            auto it = constants.find(ref->def_->is_vardef()->name_);
+            if (it != constants.end()) {
+                e.replace_val(std::make_shared<float_rep>(it->second));
+            }
+            constants.insert({e.var_->is_vardef()->name_, e.val_->is_float()->val_});
+        }
+        e.val_->accept(*this);
+
+        if (auto bin = e.val_->is_binary()) {
+            if (bin->lhs_->is_float() && bin->rhs_->is_float()) {
+                auto lhs_val = bin->lhs_->is_float()->val_;
+                auto rhs_val = bin->rhs_->is_float()->val_;
+                float result;
+                switch (bin->op_) {
+                    case operation::add : {
+                        result = lhs_val + rhs_val;
+                        break;
+                    }
+                    case operation::sub : {
+                        result = lhs_val - rhs_val;
+                        break;
+                    }
+                    case operation::mul : {
+                        result = lhs_val * rhs_val;
+                        break;
+                    }
+                    case operation::div : {
+                        result = lhs_val / rhs_val;
+                        break;
+                    }
+                    default: break;
+                }
+                e.replace_val(std::make_shared<float_rep>(result));
+            }
+        }
+
+        e.scope_->accept(*this);
+    }
+
+    void visit(binary_rep& e) override {
+        if (auto var = e.lhs_->is_varref()) {
+            auto it = constants.find(var->def_->is_vardef()->name_);
+            if (it != constants.end()) {
+                e.replace_lhs(std::make_shared<float_rep>(it->second));
+            }
+        }
+        if (auto var = e.rhs_->is_varref()) {
+            auto it = constants.find(var->def_->is_vardef()->name_);
+            if (it != constants.end()) {
+                e.replace_rhs(std::make_shared<float_rep>(it->second));
+            }
+        }
+    }
+
+    void visit(create_rep& e) override {
+        for (unsigned i = 0; i < e.fields_.size(); ++i) {
+            if (auto var = e.fields_[i]->is_varref()) {
+                auto it = constants.find(var->def_->is_vardef()->name_);
+                if (it != constants.end()) {
+                    e.replace_field(i, std::make_shared<float_rep>(it->second));
+                }
+            }
+        }
+    }
+
+    void visit(apply_rep& e) override {
+        for (unsigned i = 0; i < e.args_.size(); ++i) {
+            if (auto var = e.args_[i]->is_varref()) {
+                auto it = constants.find(var->def_->is_vardef()->name_);
+                if (it != constants.end()) {
+                    e.replace_arg(i, std::make_shared<float_rep>(it->second));
+                }
+            }
+        }
+    }
+
+    void visit(ir_expression& e) override {}
+};
+
+struct eliminate_dead_code : visitor {
+    virtual void visit(func_rep& e) override {}
+
+    virtual void visit(struct_rep& e) override {}
+
+    virtual void visit(float_rep& e) override {}
+
+    virtual void visit(varref_rep& e) override {
+
+    virtual void visit(binary_rep& e) override {}
+
+    virtual void visit(access_rep& e) override {}
+
+    virtual void visit(create_rep& e) override {}
+
+    virtual void visit(ir_expression& e) override {}
+}
+}; //namespace ir
