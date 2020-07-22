@@ -489,7 +489,7 @@ struct print : visitor {
     }
 
     virtual void visit(const let_rep& e) override {
-        out_ << "(let   (";
+        out_ << "(let_v (";
         e.var_->accept(*this);
         out_ << " (";
         e.val_->accept(*this);
