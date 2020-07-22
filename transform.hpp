@@ -84,11 +84,16 @@ void constant_propagate(ir::ir_ptr nested) {
 }
 
 void eliminate_dead_code(ir::ir_ptr nested) {
-    bool prop = true;
+    bool elim = true;
 
-    while(prop) {
-        auto edc = ir::eliminate_dead_code();
-        nested->accept(edc);
-        prop = edc.dead_code_emilinated();
+    while (elim) {
+        auto unused = ir::unused_variables();
+        nested->accept(unused);
+        auto unused_set = unused.unused_set();
+
+        auto eliminate = ir::eliminate_dead_code(unused_set);
+        nested->accept(eliminate);
+
+        elim = unused_set.empty();
     }
 }

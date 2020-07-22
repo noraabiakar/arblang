@@ -323,168 +323,178 @@ struct visitor {
 };
 
 struct print : visitor {
-        std::ostream& out_;
-        unsigned indent_ = 0;
+    std::ostream& out_;
+    unsigned indent_ = 0;
 
-        print(std::ostream& out) : out_(out) {}
+    print(std::ostream& out) : out_(out) {}
 
-        virtual void visit(func_rep& e) override {
-            out_ << "(let_f (";
+    virtual void visit(func_rep& e) override {
+        out_ << "(let_f (";
 
-            if (auto t = e.type_->is_func()->ret_->is_struct()) {
-                out_ << t->name_ << " ";
-            } else {
-                out_ << "float ";
-            }
+        if (auto t = e.type_->is_func()->ret_->is_struct()) {
+            out_ << t->name_ << " ";
+        } else {
+            out_ << "float ";
+        }
 
-            out_ << e.name_ << " (";
+        out_ << e.name_ << " (";
 
-            for (auto& a: e.args_) {
-                a->accept(*this);
-                out_ << " ";
-            }
-            out_ << ")";
+        for (auto& a: e.args_) {
+            a->accept(*this);
+            out_ << " ";
+        }
+        out_ << ")";
 
+        indent_+=2;
+        out_ << "\n" << move(indent_);
+
+        e.body_->accept(*this);
+
+        indent_-=2;
+        out_ << move(indent_) << ")";
+
+        if(e.scope_) {
             indent_+=2;
-            out_ << "\n" << move(indent_);
+            out_ << "\n" << move(indent_) << "in  ";
 
-            e.body_->accept(*this);
+            e.scope_->accept(*this);
 
             indent_-=2;
-            out_ << move(indent_) << ")";
-
-            if(e.scope_) {
-                indent_+=2;
-                out_ << "\n" << move(indent_) << "in  ";
-
-                e.scope_->accept(*this);
-
-                indent_-=2;
-                out_ << move(indent_) << ")\n";
-            } else {
-                out_ << ")\n";
-            }
-
+            out_ << move(indent_) << ")\n";
+        } else {
+            out_ << ")\n";
         }
 
-        virtual void visit(struct_rep& e) override {
-            out_ << "(let_s (" << e.name_ << " (";
+    }
 
-            for (auto& f: e.fields_) {
-                f->accept(*this);
-                out_ << " ";
-            }
-            out_ << "))";
+    virtual void visit(struct_rep& e) override {
+        out_ << "(let_s (" << e.name_ << " (";
 
-            if(e.scope_) {
-                indent_+=2;
-                out_ << "\n" << move(indent_) << "in  ";
-
-                e.scope_->accept(*this);
-
-                indent_-=2;
-                out_ << move(indent_) << ")\n";
-            } else {
-                out_ << ")\n";
-            }
-        }
-
-        virtual void visit(float_rep& e) override {
-            out_ << e.val_;
-        }
-
-        virtual void visit(vardef_rep& e) override {
-            out_ << e.name_ << ":";
-            if (auto t = e.type_->is_struct()) {
-                out_ << t->name_;
-            } else if (auto t = e.type_->is_float()){
-                out_ << "float";
-            }
-        }
-
-        virtual void visit(varref_rep& e) override {
-            out_ << e.def_->is_vardef()->name_;
-        }
-
-        virtual void visit(let_rep& e) override {
-            out_ << "(let_v (";
-            e.var_->accept(*this);
-            out_ << " (";
-            e.val_->accept(*this);
-            out_ << "))";
-
-            if(e.scope_) {
-                indent_+=2;
-                out_ << "\n" << move(indent_) << "in  ";
-
-                e.scope_->accept(*this);
-
-                if (e.scope_->is_varref()) {
-                    out_ << "\n";
-                }
-
-                indent_-=2;
-                out_ << move(indent_) << ")\n";
-            } else {
-                out_ << ")\n";
-            }
-        }
-
-        virtual void visit(binary_rep& e) override {
-            out_ << "(";
-
-            switch (e.op_) {
-                case operation::add: {
-                    out_ << " + ";
-                    break;
-                }
-                case operation::sub: {
-                    out_ << " - ";
-                    break;
-                }
-                case operation::mul: {
-                    out_ << " * ";
-                    break;
-                }
-                case operation::div: {
-                    out_ << " / ";
-                    break;
-                }
-            }
-            e.lhs_->accept(*this);
+        for (auto& f: e.fields_) {
+            f->accept(*this);
             out_ << " ";
-            e.rhs_->accept(*this);
-            out_ << ")";
         }
+        out_ << "))";
 
-        virtual void visit(access_rep& e) override {
-            e.var_->accept(*this);
-            out_ << ".at(" << e.index_ << ")";
+        if(e.scope_) {
+            indent_+=2;
+            out_ << "\n" << move(indent_) << "in  ";
+
+            e.scope_->accept(*this);
+
+            indent_-=2;
+            out_ << move(indent_) << ")\n";
+        } else {
+            out_ << ")\n";
         }
+    }
 
-        virtual void visit(create_rep& e) override {
-            out_ << "(create ";
-            if (auto t = e.type_->is_struct()) {
-                out_ << t->name_ << "(";
-            } else {
-                out_ << "float(";
-            };
-            for (auto& a: e.fields_) {
-                a->accept(*this);
-                out_ << " ";
+    virtual void visit(float_rep& e) override {
+        out_ << e.val_;
+    }
+
+    virtual void visit(vardef_rep& e) override {
+        out_ << e.name_ << ":";
+        if (auto t = e.type_->is_struct()) {
+            out_ << t->name_;
+        } else if (auto t = e.type_->is_float()){
+            out_ << "float";
+        }
+    }
+
+    virtual void visit(varref_rep& e) override {
+        out_ << e.def_->is_vardef()->name_;
+    }
+
+    virtual void visit(let_rep& e) override {
+        out_ << "(let_v (";
+        e.var_->accept(*this);
+        out_ << " (";
+        e.val_->accept(*this);
+        out_ << "))";
+
+        if(e.scope_) {
+            indent_+=2;
+            out_ << "\n" << move(indent_) << "in  ";
+
+            e.scope_->accept(*this);
+
+            if (e.scope_->is_varref()) {
+                out_ << "\n";
             }
-            out_ << "))";
-        }
 
-        virtual void visit(ir_expression& e) override {
+            indent_-=2;
+            out_ << move(indent_) << ")\n";
+        } else {
+            out_ << ")\n";
         }
+    }
 
-    private:
-        std::string move(int x) {
-            return std::string(x, ' ');
+    virtual void visit(binary_rep& e) override {
+        out_ << "(";
+
+        switch (e.op_) {
+            case operation::add: {
+                out_ << " + ";
+                break;
+            }
+            case operation::sub: {
+                out_ << " - ";
+                break;
+            }
+            case operation::mul: {
+                out_ << " * ";
+                break;
+            }
+            case operation::div: {
+                out_ << " / ";
+                break;
+            }
         }
+        e.lhs_->accept(*this);
+        out_ << " ";
+        e.rhs_->accept(*this);
+        out_ << ")";
+    }
 
-    };
+    virtual void visit(access_rep& e) override {
+        e.var_->accept(*this);
+        out_ << ".at(" << e.index_ << ")";
+    }
+
+    virtual void visit(create_rep& e) override {
+        out_ << "(create ";
+        if (auto t = e.type_->is_struct()) {
+            out_ << t->name_ << "(";
+        } else {
+            out_ << "float(";
+        };
+        for (auto& a: e.fields_) {
+            a->accept(*this);
+            out_ << " ";
+        }
+        out_ << "))";
+    }
+
+    virtual void visit(apply_rep& e) override {
+        out_ << "(apply ";
+        out_ << e.type_->is_func()->name_ << "(";
+        for (auto& a: e.args_) {
+            a->accept(*this);
+            out_ << " ";
+        }
+        out_ << "))";
+    }
+
+    virtual void visit(ir_expression& e) override {
+    }
+
+private:
+    std::string move(int x) {
+        return std::string(x, ' ');
+    }
+
+};
 
 struct canonical : visitor {
     std::vector<ir_ptr> new_lets;
@@ -906,21 +916,117 @@ struct constant_prop : visitor {
     void visit(ir_expression& e) override {}
 };
 
+struct unused_variables : visitor {
+    std::unordered_map<std::string, bool> variables_;
+
+    std::set<std::string> unused_set() {
+        std::set<std::string> ret;
+        for (auto a: variables_) {
+            if(!a.second) {
+                ret.insert(a.first);
+            }
+        }
+        return ret;
+    }
+
+    void visit(func_rep& e) override {
+        for (auto a: e.args_) {
+            // assume all function variables are used?
+            variables_.insert({a->is_vardef()->name_, true});
+        }
+        e.body_->accept(*this);
+        if(e.scope_) {
+            e.scope_->accept(*this);
+        }
+    }
+
+    void visit(struct_rep& e) override {
+        if(e.scope_) {
+            e.scope_->accept(*this);
+        }
+    }
+
+    void visit(varref_rep& e) override {
+        variables_.at(e.def_->is_vardef()->name_) = true;
+    }
+
+    void visit(vardef_rep& e) override {
+        variables_.insert({e.name_, false});
+    }
+
+    void visit(let_rep& e) override {
+        e.var_->accept(*this);
+        e.val_->accept(*this);
+        e.scope_->accept(*this);
+    }
+
+    void visit(binary_rep& e) override {
+        e.lhs_->accept(*this);
+        e.rhs_->accept(*this);
+    }
+
+    void visit(access_rep& e) override {
+        e.var_->accept(*this);
+    }
+
+    void visit(create_rep& e) override {
+        for (auto a: e.fields_) {
+            a->accept(*this);
+        }
+    }
+
+    void visit(apply_rep& e) override {
+        for (auto a: e.args_) {
+            a->accept(*this);
+        }
+    }
+
+    void visit(ir_expression& e) override {}
+};
+
 struct eliminate_dead_code : visitor {
-    virtual void visit(func_rep& e) override {}
+    std::set<std::string> unused_vars_;
 
-    virtual void visit(struct_rep& e) override {}
+    eliminate_dead_code(std::set<std::string> unused_vars) : unused_vars_(unused_vars) {}
 
-    virtual void visit(float_rep& e) override {}
+    void visit(func_rep& e) override {
+        while (remove(e.body_->is_let())) {
+            e.body_ = e.body_->is_let()->scope_;
+        }
+        e.body_->accept(*this);
 
-    virtual void visit(varref_rep& e) override {
+        if(e.scope_) {
+            while (remove(e.scope_->is_let())) {
+                e.scope_ = e.scope_->is_let()->scope_;
+            }
+            e.scope_->accept(*this);
+        }
+    }
 
-    virtual void visit(binary_rep& e) override {}
+    void visit(struct_rep& e) override {
+        if (e.scope_) {
+            while (remove(e.scope_->is_let())) {
+                e.scope_ = e.scope_->is_let()->scope_;
+            }
+            e.scope_->accept(*this);
+        }
+    }
 
-    virtual void visit(access_rep& e) override {}
+    void visit(let_rep& e) override {
+        while (remove(e.scope_->is_let())) {
+            e.scope_ = e.scope_->is_let()->scope_;
+        }
+        e.scope_->accept(*this);
+    }
 
-    virtual void visit(create_rep& e) override {}
+    void visit(ir_expression& e) override {}
 
-    virtual void visit(ir_expression& e) override {}
-}
+private:
+    bool remove(const let_rep* let) {
+        if(!let) {
+            return false;
+        }
+        return unused_vars_.count(let->var_->is_vardef()->name_);
+    }
+};
 }; //namespace ir

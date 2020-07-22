@@ -37,9 +37,13 @@ int main() {
 
     auto ir_printer = ir::print(std::cout);
     auto nested_stmt = create_arblang_ir(block);
-    constant_propagate(nested_stmt);
 
     std::cout << "\n------------------------------------------------------\n";
+    constant_propagate(nested_stmt);
+    nested_stmt->accept(ir_printer);
+
+    std::cout << "\n------------------------------------------------------\n";
+    eliminate_dead_code(nested_stmt);
     nested_stmt->accept(ir_printer);
 
     return 0;
