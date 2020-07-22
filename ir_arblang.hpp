@@ -71,6 +71,10 @@ struct func_rep : ir_expression {
         scope_ = scope;
     }
 
+    void set_body(const ir_ptr& body) {
+        body_ = body;
+    }
+
     void accept(visitor& v) override;
 
     func_rep* is_func() override {return this;}
@@ -131,6 +135,10 @@ struct let_rep : ir_expression {
     let_rep(ir_ptr var, ir_ptr val) : var_(var), val_(val) {}
 
     let_rep(ir_ptr var, ir_ptr val, ir_ptr scope, type_ptr type) : ir_expression(type), var_(var), val_(val), scope_(scope) {}
+
+    void set_scope(const ir_ptr& scope) {
+        scope_ = scope;
+    }
 
     void accept(visitor& v) override;
 

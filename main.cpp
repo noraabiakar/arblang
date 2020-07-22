@@ -1,13 +1,13 @@
 #include "visitor.hpp"
 
-std::vector<ir::ir_ptr> create_arblang_ir(std::shared_ptr<core::block_expr> e) {
+ir::ir_ptr create_arblang_ir(std::shared_ptr<core::block_expr> e) {
     std::vector<ir::ir_ptr> statements;
     auto creator = core::create_ir();
 
     for (auto& s: e->statements_) {
-//        if (!s->is_struct() && !s->is_func()) {
-//            throw std::runtime_error("Can only transform struct/func definitions");
-//        }
+        if (!s->is_struct() && !s->is_func()) {
+            throw std::runtime_error("Can only transform struct/func definitions");
+        }
         s->accept(creator);
         statements.push_back(creator.statement_);
         creator.reset();
@@ -17,16 +17,36 @@ std::vector<ir::ir_ptr> create_arblang_ir(std::shared_ptr<core::block_expr> e) {
 
     for (auto& s: statements) {
         if (!s->is_func()) { continue; }
+
+        // Get the list of lets created in the function
         s->is_func()->body_->accept(canon);
         auto new_lets = canon.new_lets;
 
-        auto ir_printer = ir::print(std::cout);
-        for (auto& l: new_lets) {
-            l->accept(ir_printer);
+        // Nest the scopes of the lets
+        for (unsigned i = 0; i < new_lets.size()-1; ++i) {
+            auto& l = new_lets[i];
+            auto& n = new_lets[i+1];
+            l->is_let()->set_scope(n);
+        }
+
+        // Insert the top-most let in the body of the function
+        s->is_func()->set_body(new_lets.front());
+    }
+
+    // Nest the rest of the statements
+    for (unsigned i= 0; i < statements.size()-1; ++i) {
+        auto& s = statements[i];
+        auto n = statements[i+1];
+        if (auto f = s->is_func()) {
+            f->set_scope(n);
+        }
+        if (auto f = s->is_struct()) {
+            f->set_scope(n);
         }
     }
 
-    return statements;
+    // return the top-most statement
+    return statements.front();
 };
 
 int main() {
@@ -60,13 +80,12 @@ int main() {
     auto block = std::make_shared<core::block_expr>(std::vector<core::expr_ptr>{current_contrib, ion_state, cell, state, param, current});
 
     block->accept(core_printer);
-    std::cout << "\n------------------------------------------------------\n";
 
     auto ir_printer = ir::print(std::cout);
-    auto statements = create_arblang_ir(block);
-//    for (auto s: statements) {
-//        s->accept(ir_printer);
-//    }
+    auto nested_stmt = create_arblang_ir(block);
+
+    std::cout << "\n------------------------------------------------------\n";
+    nested_stmt->accept(ir_printer);
 
     return 0;
 }

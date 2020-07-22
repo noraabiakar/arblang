@@ -63,11 +63,11 @@ struct print : visitor {
     }
 
     virtual void visit(const let_expr& e) override {
-        out_ << "(let \t(";
+        out_ << "(let   (";
         e.var_->accept(*this);
         out_ << " (";
         e.val_->accept(*this);
-        out_ << "))\nin\t";
+        out_ << "))\nin  ";
 
         e.body_->accept(*this);
 
@@ -406,25 +406,47 @@ struct canonical : visitor {
 
 struct print : visitor {
     std::ostream& out_;
+    unsigned indent_ = 0;
 
     print(std::ostream& out) : out_(out) {}
 
     virtual void visit(const func_rep& e) override {
-        out_ << "(";
+        out_ << "(let_f (";
+
         if (auto t = e.type_->is_func()->ret_->is_struct()) {
-            out_ << t->name_;
+            out_ << t->name_ << " ";
         } else {
-            out_ << "float";
+            out_ << "float ";
         }
-        out_ << " let_f (" << e.name_ << " (";
+
+        out_ << e.name_ << " (";
 
         for (auto& a: e.args_) {
             a->accept(*this);
             out_ << " ";
         }
-        out_ << ") ";
+        out_ << ")";
+
+        indent_+=2;
+        out_ << "\n" << move(indent_);
+
         e.body_->accept(*this);
-        out_ << "))\n";
+
+        indent_-=2;
+        out_ << move(indent_) << ")";
+
+        if(e.scope_) {
+            indent_+=2;
+            out_ << "\n" << move(indent_) << "in  ";
+
+            e.scope_->accept(*this);
+
+            indent_-=2;
+            out_ << move(indent_) << ")\n";
+        } else {
+            out_ << ")\n";
+        }
+
     }
 
     virtual void visit(const struct_rep& e) override {
@@ -434,7 +456,19 @@ struct print : visitor {
             f->accept(*this);
             out_ << " ";
         }
-        out_ << ")))\n";
+        out_ << "))";
+
+        if(e.scope_) {
+            indent_+=2;
+            out_ << "\n" << move(indent_) << "in  ";
+
+            e.scope_->accept(*this);
+
+            indent_-=2;
+            out_ << move(indent_) << ")\n";
+        } else {
+            out_ << ")\n";
+        }
     }
 
     virtual void visit(const float_rep& e) override {
@@ -455,18 +489,23 @@ struct print : visitor {
     }
 
     virtual void visit(const let_rep& e) override {
-        out_ << "(let \t(";
+        out_ << "(let   (";
         e.var_->accept(*this);
         out_ << " (";
         e.val_->accept(*this);
         out_ << "))";
 
         if(e.scope_) {
-            out_ << "\nin\t";
-            e.scope_->accept(*this);
-        }
+            indent_+=2;
+            out_ << "\n" << move(indent_) << "in  ";
 
-        out_ << ")\n";
+            e.scope_->accept(*this);
+
+            indent_-=2;
+            out_ << move(indent_) << ")\n";
+        } else {
+            out_ << ")\n";
+        }
     }
 
     virtual void visit(const binary_rep& e) override {
@@ -516,6 +555,11 @@ struct print : visitor {
     }
 
     virtual void visit(const ir_expression& e) override {
+    }
+
+private:
+    std::string move(int x) {
+        return std::string(x, ' ');
     }
 
 };
