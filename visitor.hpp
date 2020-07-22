@@ -718,6 +718,12 @@ struct validate : visitor {
         if (e.lhs_->type()!= e.type()) {
             throw std::runtime_error("Binary expression's type is incompatible with the lhs/rhs type");
         }
+
+        // Check if canonical
+        if (!(e.lhs_->is_varref() || e.lhs_->is_float()) ||
+            !(e.rhs_->is_varref() || e.rhs_->is_float())) {
+            throw std::runtime_error("Binary expression's is not canonical");
+        }
     }
 
     virtual void visit(const access_rep& e) override {
@@ -754,6 +760,13 @@ struct validate : visitor {
                 throw std::runtime_error("Create expression has fields with incorrect types");
             }
         }
+
+        // Check if canonical
+        for (auto a:e.fields_) {
+            if (!(a->is_varref() || a->is_float())) {
+                throw std::runtime_error("create expression's is not canonical");
+            }
+        }
     }
 
     virtual void visit(const apply_rep& e) override {
@@ -771,6 +784,13 @@ struct validate : visitor {
             auto t1 = e.type()->is_func()->args_[i].type;
             if (t0 != t1) {
                 throw std::runtime_error("Apply expression has args with incorrect types");
+            }
+        }
+
+        // Check if canonical
+        for (auto a:e.args_) {
+            if (!(a->is_varref() || a->is_float())) {
+                throw std::runtime_error("create expression's is not canonical");
             }
         }
     }
