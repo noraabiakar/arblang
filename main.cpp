@@ -22,14 +22,22 @@ ir::ir_ptr create_arblang_ir(std::shared_ptr<core::block_expr> e) {
         s->is_func()->body_->accept(canon);
         auto new_lets = canon.new_lets;
 
+        // Set the type and scope of the last defined let to be varref of the let and it's type
+        auto return_val = std::make_shared<ir::varref_rep>(new_lets.back()->is_let()->var_, new_lets.back()->is_let()->var_->type());
+        new_lets.back()->is_let()->set_scope(return_val);
+        new_lets.back()->is_let()->set_type(return_val->type());
+
+        // Set the types of the lets
+        for (int i = new_lets.size()-2; i >=0; --i) {
+            new_lets[i]->is_let()->set_type(new_lets[i+1]->type_);
+        }
+
         // Nest the scopes of the lets
         for (unsigned i = 0; i < new_lets.size()-1; ++i) {
             auto& l = new_lets[i];
             auto& n = new_lets[i+1];
             l->is_let()->set_scope(n);
         }
-        auto return_val = std::make_shared<ir::varref_rep>(new_lets.back()->is_let()->var_, new_lets.back()->is_let()->var_->type());
-        new_lets.back()->is_let()->set_scope(return_val);
 
         // Insert them in the deepest scope of the statement
         if (!s->is_func()->body_->is_let()) {
@@ -57,6 +65,9 @@ ir::ir_ptr create_arblang_ir(std::shared_ptr<core::block_expr> e) {
             f->set_scope(n);
         }
     }
+
+    auto valid = ir::validate();
+    statements.front()->accept(valid);
 
     // return the top-most statement
     return statements.front();

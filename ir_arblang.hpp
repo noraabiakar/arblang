@@ -25,8 +25,6 @@ struct binary_rep;
 struct access_rep;
 struct create_rep;
 struct apply_rep;
-struct nested_rep;
-struct halt_rep;
 
 struct ir_expression {
     virtual func_rep*    is_func()     {return nullptr;}
@@ -39,8 +37,6 @@ struct ir_expression {
     virtual access_rep*  is_access()   {return nullptr;}
     virtual create_rep*  is_create()   {return nullptr;}
     virtual apply_rep*   is_apply()    {return nullptr;}
-    virtual nested_rep*  is_nested()   {return nullptr;}
-    virtual halt_rep*    is_halt()     {return nullptr;}
 
     virtual void accept(visitor&) = 0;
 
@@ -140,6 +136,10 @@ struct let_rep : ir_expression {
         scope_ = scope;
     }
 
+    void set_type(const type_ptr type) {
+        type_ = type;
+    }
+
     void accept(visitor& v) override;
 
     let_rep* is_let() override {return this;}
@@ -185,19 +185,5 @@ struct apply_rep : ir_expression {
     void accept(visitor& v) override;
 
     apply_rep* is_apply() override {return this;}
-};
-
-struct halt_rep : ir_expression {
-    void accept(visitor& v) override;
-};
-
-struct nested_rep: ir_expression {
-    ir_ptr statement_;
-
-    nested_rep(ir_ptr statement): statement_(statement) {}
-
-    void accept(visitor& v) override;
-
-    nested_rep* is_nested() override {return this;}
 };
 } //namespace ir

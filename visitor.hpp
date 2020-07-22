@@ -320,8 +320,6 @@ struct visitor {
     virtual void visit(const access_rep& e) {visit((ir_expression&) e);};
     virtual void visit(const create_rep& e) {visit((ir_expression&) e);};
     virtual void visit(const apply_rep& e)  {visit((ir_expression&) e);};
-    virtual void visit(const nested_rep& e) {visit((ir_expression&) e);};
-    virtual void visit(const halt_rep& e)   {visit((ir_expression&) e);};
 };
 
 struct canonical : visitor {
@@ -562,5 +560,220 @@ private:
         return std::string(x, ' ');
     }
 
+};
+
+struct validate : visitor {
+    validate() {};
+
+    virtual void visit(const func_rep& e) override {
+        if (!e.body_) {
+            throw std::runtime_error("Function " + e.name_ + " has no body");
+        }
+        for(auto a: e.args_) {
+            if (!a->is_vardef()) {
+                throw std::runtime_error("Function " + e.name_ + " has an invalid argument");
+            }
+        }
+        if (!e.type()) {
+            throw std::runtime_error("Function " + e.name_ + " has no type");
+        }
+        if (e.type()->name() != e.name_) {
+            throw std::runtime_error("Mismatch between function " + e.name_ + " name and it's type's name");
+        }
+        if (!e.type()->is_func()) {
+            throw std::runtime_error("Function " + e.name_ + " has non-function type");
+        }
+        if (!e.type()->is_func()->ret_) {
+            throw std::runtime_error("Function " + e.name_ + " has no return type");
+        }
+        if (e.type()->is_func()->args_.size() != e.args_.size()) {
+            throw std::runtime_error("Mismatch between function " + e.name_ + "'s type and it's arguments");
+        }
+
+        e.body_->accept(*this);
+        if (e.scope_) {
+            e.scope_->accept(*this);
+        }
+
+        for (auto a:e.args_) {
+            a->accept(*this);
+        }
+
+        for (unsigned i = 0; i < e.args_.size(); ++i) {
+            auto t0 = e.args_[i]->type();
+            auto t1 = e.type()->is_func()->args_[i].type;
+
+            auto n0 = e.args_[i]->is_vardef()->name_;
+            auto n1 = e.type()->is_func()->args_[i].name;
+
+            if (t0 != t1 || n0 != n1) {
+                throw std::runtime_error("Mismatch between function " + e.name_ + "'s type and it's arguments");
+            }
+        }
+    }
+
+    virtual void visit(const struct_rep& e) override {
+        for(auto a: e.fields_) {
+            if (!a->is_vardef()) {
+                throw std::runtime_error("Struct " + e.name_ + " has an invalid field");
+            }
+        }
+        if (!e.type()) {
+            throw std::runtime_error("Struct " + e.name_ + " has no type");
+        }
+        if (e.type()->name() != e.name_) {
+            throw std::runtime_error("Mismatch between struct " + e.name_ + " name and it's type's name");
+        }
+        if (!e.type()->is_struct()) {
+            throw std::runtime_error("Struct " + e.name_ + " has non-struct type");
+        }
+        if (e.type()->is_struct()->fields_.size() != e.fields_.size()) {
+            throw std::runtime_error("Mismatch between struct " + e.name_ + "'s type and it's fields");
+        }
+
+        if (!e.scope_) {
+            throw std::runtime_error("Struct " + e.name_ + " has no associated scope");
+        }
+        e.scope_->accept(*this);
+
+        for (auto a:e.fields_) {
+            a->accept(*this);
+        }
+        for (unsigned i = 0; i < e.fields_.size(); ++i) {
+            auto t0 = e.fields_[i]->type();
+            auto t1 = e.type()->is_struct()->fields_[i].type;
+
+            auto n0 = e.fields_[i]->is_vardef()->name_;
+            auto n1 = e.type()->is_struct()->fields_[i].name;
+
+            if (t0 != t1 || n0 != n1) {
+                throw std::runtime_error("Mismatch between struct " + e.name_ + "'s type and it's arguments");
+            }
+        }
+    }
+
+    virtual void visit(const float_rep& e) override {
+        if (!e.type()) {
+            throw std::runtime_error("Float number has no type");
+        }
+        if (!e.type()->is_float()) {
+            throw std::runtime_error("Float number has non-float type");
+        }
+    }
+
+    virtual void visit(const vardef_rep& e) override {
+        if (e.name_.empty()) {
+            throw std::runtime_error("Variable defintion has no name");
+        }
+        if (!e.type()) {
+            throw std::runtime_error("Variable defintion has no type");
+        }
+        if (e.type()->is_func()) {
+            throw std::runtime_error("Variable definiton can't have function type");
+        }
+    }
+
+    virtual void visit(const varref_rep& e) override {
+        if (!e.type()) {
+            throw std::runtime_error("Variable references has no type");
+        }
+        if (!e.def_->is_vardef()) {
+            throw std::runtime_error("Variable references a non-vardef expression");
+        }
+
+        e.def_->accept(*this);
+        if (e.type() != e.def_->type()) {
+            throw std::runtime_error("Variable references different type from the variable definiton");
+        }
+    }
+
+    virtual void visit(const let_rep& e) override {
+        if (!e.type()) {
+            throw std::runtime_error("Let expression has no type");
+        }
+        if (!e.var_->is_vardef()) {
+            throw std::runtime_error("Let expression's variable references non-vardef expression");
+        }
+        if (!e.scope_) {
+            throw std::runtime_error("Let expression has no associated scope");
+        }
+        e.var_->accept(*this);
+        e.val_->accept(*this);
+        e.scope_->accept(*this);
+        if (e.scope_->type() != e.type()) {
+            throw std::runtime_error("Let expression's type is not the same as its scope's type");
+        }
+    }
+
+    virtual void visit(const binary_rep& e) override {
+        if (!e.type()) {
+            throw std::runtime_error("Binary expression has no type");
+        }
+        e.lhs_->accept(*this);
+        e.rhs_->accept(*this);
+
+        if (e.lhs_->type()!= e.rhs_->type() || !e.lhs_->type()->is_float()) {
+            throw std::runtime_error("Binary expression has incompatible lhs and rhs types");
+        }
+        if (e.lhs_->type()!= e.type()) {
+            throw std::runtime_error("Binary expression's type is incompatible with the lhs/rhs type");
+        }
+    }
+
+    virtual void visit(const access_rep& e) override {
+        if (!e.type()) {
+            throw std::runtime_error("Access expression has no type");
+        }
+        if (!e.var_->is_varref()) {
+            throw std::runtime_error("Cannot access argument of a non-varref expression");
+        }
+        e.var_->accept(*this);
+
+        if (!e.var_->type()->is_struct()) {
+            throw std::runtime_error("Access expression cannot access non-struct type");
+        }
+        if (e.var_->type()->is_struct()->fields_[e.index_].type != e.type()) {
+            throw std::runtime_error("Access expression's type is not the same as the accessed argument's type");
+        }
+    }
+
+    virtual void visit(const create_rep& e) override {
+        if (!e.type()) {
+            throw std::runtime_error("Create expression has no type");
+        }
+        if (!e.type()->is_struct()) {
+            throw std::runtime_error("Create expression has non-struct type");
+        }
+        for (auto a:e.fields_) {
+            a->accept(*this);
+        }
+        for (unsigned i = 0; i < e.fields_.size(); ++i) {
+            auto t0 = e.fields_[i]->type();
+            auto t1 = e.type()->is_struct()->fields_[i].type;
+            if (t0 != t1) {
+                throw std::runtime_error("Create expression has fields with incorrect types");
+            }
+        }
+    }
+
+    virtual void visit(const apply_rep& e) override {
+        if (!e.type()) {
+            throw std::runtime_error("Apply expression has no type");
+        }
+        if (!e.type()->is_func()) {
+            throw std::runtime_error("Apply expression has non-func type");
+        }
+        for (auto a:e.args_) {
+            a->accept(*this);
+        }
+        for (unsigned i = 0; i < e.args_.size(); ++i) {
+            auto t0 = e.args_[i]->type();
+            auto t1 = e.type()->is_func()->args_[i].type;
+            if (t0 != t1) {
+                throw std::runtime_error("Apply expression has args with incorrect types");
+            }
+        }
+    }
+    virtual  void visit(const ir_expression& e) override {}
 };
 } //namespace ir

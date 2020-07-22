@@ -70,11 +70,4 @@ void create_rep::accept(visitor& v) {
 void apply_rep::accept(visitor& v) {
     v.visit(*this);
 }
-void nested_rep::accept(visitor& v) {
-    v.visit(*this);
-}
-
-void halt_rep::accept(visitor& v) {
-    v.visit(*this);
-}
 };
