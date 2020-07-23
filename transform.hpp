@@ -99,6 +99,11 @@ void elim_dead_code(ir::ir_ptr nested) {
 }
 
 void elim_common_subexpressions(ir::ir_ptr nested) {
-    auto cse = ir::eliminate_common_subexpressions();
-    nested->accept(cse);
+    while (true) {
+        auto cse = ir::eliminate_common_subexpressions();
+        nested->accept(cse);
+        if (cse.rename_map_.empty()) {
+            break;
+        }
+    }
 }

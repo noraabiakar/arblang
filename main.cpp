@@ -34,24 +34,33 @@ int main() {
     auto block = std::make_shared<core::block_expr>(std::vector<core::expr_ptr>{current_contrib, ion_state, cell, state, param, current});
 
     block->accept(core_printer);
+    std::cout << "\n------------------------------------------------------\n";
 
     auto ir_printer = ir::print(std::cout);
+    auto valid = ir::validate();
+
     auto nested_stmt = create_arblang_ir(block);
+    nested_stmt->accept(valid);
+    nested_stmt->accept(ir_printer);
 
     std::cout << "\n------------------------------------------------------\n";
     constant_propagate(nested_stmt);
+    nested_stmt->accept(valid);
     nested_stmt->accept(ir_printer);
 
     std::cout << "\n------------------------------------------------------\n";
     elim_dead_code(nested_stmt);
+    nested_stmt->accept(valid);
     nested_stmt->accept(ir_printer);
 
     std::cout << "\n------------------------------------------------------\n";
     elim_common_subexpressions(nested_stmt);
+    nested_stmt->accept(valid);
     nested_stmt->accept(ir_printer);
 
     std::cout << "\n------------------------------------------------------\n";
     elim_dead_code(nested_stmt);
+    nested_stmt->accept(valid);
     nested_stmt->accept(ir_printer);
 
     return 0;
