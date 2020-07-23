@@ -1029,4 +1029,170 @@ private:
         return unused_vars_.count(let->var_->is_vardef()->name_);
     }
 };
+
+struct eliminate_common_subexpressions : visitor {
+    std::unordered_map<std::string, ir_ptr> rename_map_; // string -> vardef
+    std::vector<std::pair<ir_ptr, ir_ptr>> expressions_; // ir_ptr -> vardef
+
+    void visit(func_rep& e) override {
+        e.body_->accept(*this);
+        if(e.scope_) {
+            e.scope_->accept(*this);
+        }
+    }
+
+    void visit(struct_rep& e) override {
+        e.scope_->accept(*this);
+    }
+
+    void visit(varref_rep& e) override {
+        if (rename_map_.count(e.def_->is_vardef()->name_)) {
+            auto new_def = rename_map_.at(e.def_->is_vardef()->name_);
+            e.def_ = new_def;
+        }
+    }
+
+    void visit(let_rep& e) override {
+        e.val_->accept(*this);
+        for (auto& a: expressions_) {
+            auto exp = a.first;
+            auto matching_def = a.second;
+            if (compare(exp, e.val_)) {
+                rename_map_[e.var_->is_vardef()->name_] = matching_def;
+                e.val_ = std::make_shared<varref_rep>(matching_def, matching_def->type());
+                e.scope_->accept(*this);
+                return;
+            }
+        }
+        expressions_.push_back({e.val_, e.var_});
+        e.scope_->accept(*this);
+    }
+
+    void visit(binary_rep& e) override {
+        e.lhs_->accept(*this);
+        e.rhs_->accept(*this);
+    }
+
+    void visit(access_rep& e) override {
+        e.var_->accept(*this);
+    }
+
+    void visit(create_rep& e) override {
+        for (auto& a:e.fields_) {
+            a->accept(*this);
+        }
+    }
+
+    void visit(apply_rep& e) override {
+        for (auto& a:e.args_) {
+            a->accept(*this);
+        }
+    }
+
+    void visit(ir_expression& e) override {}
+
+private:
+    bool compare(ir_ptr e0, ir_ptr e1) {
+        if (e0->is_float() && e1->is_float()) {
+            if (e0->is_float()->val_ == e1->is_float()->val_) {
+                return true;
+            }
+            return false;
+        }
+        if (e0->is_varref() && e1->is_varref()) {
+            if (e0->is_varref()->def_->is_vardef()->name_ ==
+                e1->is_varref()->def_->is_vardef()->name_) {
+                return true;
+            }
+            return false;
+        }
+        if (e0->is_binary() && e1->is_binary()) {
+            if (e0->is_binary()->op_ != e1->is_binary()->op_) {
+                return false;
+            }
+
+            auto lhs0 = e0->is_binary()->lhs_;
+            auto rhs0 = e0->is_binary()->rhs_;
+            auto lhs1 = e1->is_binary()->lhs_;
+            auto rhs1 = e1->is_binary()->rhs_;
+
+            bool lhs_match = false;
+            if ((lhs0->is_varref() && lhs1->is_varref()) &&
+                (lhs0->is_varref()->def_->is_vardef()->name_ == lhs1->is_varref()->def_->is_vardef()->name_)) {
+                lhs_match = true;
+            } else
+            if ((lhs0->is_float() && lhs1->is_float()) &&
+                  (lhs0->is_float()->val_ == lhs1->is_float()->val_)) {
+                lhs_match = true;
+            }
+
+            bool rhs_match = false;
+            if ((rhs0->is_varref() && rhs1->is_varref()) &&
+                (rhs0->is_varref()->def_->is_vardef()->name_ == rhs1->is_varref()->def_->is_vardef()->name_)) {
+                rhs_match = true;
+            } else
+            if ((rhs0->is_float() && rhs1->is_float()) &&
+                (rhs0->is_float()->val_ == rhs1->is_float()->val_)) {
+                rhs_match = true;
+            }
+            return lhs_match && rhs_match;
+        }
+        if (e0->is_access() && e1->is_access()) {
+            if ((e0->is_access()->var_->is_varref()->def_->is_vardef()->name_ ==
+                 e1->is_access()->var_->is_varref()->def_->is_vardef()->name_) &&
+                (e0->is_access()->index_ == e1->is_access()->index_)) {
+                return true;
+            }
+            return false;
+        }
+        if (e0->is_create() && e1->is_create()) {
+            if (e0->is_create()->type() == e1->is_create()->type()) {
+                auto& f0 = e0->is_create()->fields_;
+                auto& f1 = e1->is_create()->fields_;
+
+                for (unsigned i = 0; i < f0.size(); i++) {
+                    bool match = false;
+                    if ((f0[i]->is_float() && f1[i]->is_float()) &&
+                        (f0[i]->is_float()->val_ == f1[i]->is_float()->val_)) {
+                        match = true;
+                    }
+                    if ((f0[i]->is_varref() && f1[i]->is_varref()) &&
+                        (f0[i]->is_varref()->def_->is_vardef()->name_ == f1[i]->is_varref()->def_->is_vardef()->name_)) {
+                        match = true;
+                    }
+                    if(!match) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            return false;
+        }
+        if (e0->is_apply() && e1->is_apply()) {
+            if (e0->is_apply()->type() == e1->is_apply()->type()) {
+                auto& f0 = e0->is_apply()->args_;
+                auto& f1 = e1->is_apply()->args_;
+
+                for (unsigned i = 0; i < f0.size(); i++) {
+                    bool match = false;
+                    if ((f0[i]->is_float() && f1[i]->is_float()) &&
+                        (f0[i]->is_float()->val_ == f1[i]->is_float()->val_)) {
+                        match = true;
+                    }
+                    if ((f0[i]->is_varref() && f1[i]->is_varref()) &&
+                        (f0[i]->is_varref()->def_->is_vardef()->name_ == f1[i]->is_varref()->def_->is_vardef()->name_)) {
+                        match = true;
+                    }
+                    if(!match) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            return false;
+        }
+
+        return false;
+    };
+};
 }; //namespace ir

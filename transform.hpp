@@ -83,7 +83,7 @@ void constant_propagate(ir::ir_ptr nested) {
     }
 }
 
-void eliminate_dead_code(ir::ir_ptr nested) {
+void elim_dead_code(ir::ir_ptr nested) {
     bool elim = true;
 
     while (elim) {
@@ -96,4 +96,9 @@ void eliminate_dead_code(ir::ir_ptr nested) {
 
         elim = unused_set.empty();
     }
+}
+
+void elim_common_subexpressions(ir::ir_ptr nested) {
+    auto cse = ir::eliminate_common_subexpressions();
+    nested->accept(cse);
 }

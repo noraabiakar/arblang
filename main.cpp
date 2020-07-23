@@ -43,7 +43,15 @@ int main() {
     nested_stmt->accept(ir_printer);
 
     std::cout << "\n------------------------------------------------------\n";
-    eliminate_dead_code(nested_stmt);
+    elim_dead_code(nested_stmt);
+    nested_stmt->accept(ir_printer);
+
+    std::cout << "\n------------------------------------------------------\n";
+    elim_common_subexpressions(nested_stmt);
+    nested_stmt->accept(ir_printer);
+
+    std::cout << "\n------------------------------------------------------\n";
+    elim_dead_code(nested_stmt);
     nested_stmt->accept(ir_printer);
 
     return 0;
